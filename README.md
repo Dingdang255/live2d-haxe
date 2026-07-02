@@ -10,12 +10,7 @@ This library provides a standalone, reusable Live2D Cubism integration for Haxe/
 
 ## Demo
 
-<div align="center">
-    <h1>
-        <video src="./docs/test.mp4" controls width="600"></video>
-    </h1>
-</div>
-
+<video src="https://github.com/user-attachments/assets/c98ea2d4-15c6-4584-9d7d-ad84c42fa06a" controls="controls" style="max-width: 100%;"></video>
 
 > Demo showing model switching, hit test, expressions, motions, eye tracking, and scaling.
 
