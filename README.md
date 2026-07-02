@@ -61,8 +61,8 @@ cd native
 mkdir build
 cd build
 
-# Configure with CMake, pointing to your Cubism SDK
-cmake .. -DCUBISM_ROOT="C:/SDK/CubismSdkForNative-5-r.5"
+# Configure with CMake, pointing to your Cubism SDK, specifying x64 architecture
+cmake .. -DCUBISM_ROOT="C:/SDK/CubismSdkForNative-5-r.5" -A x64
 
 # Build (Release mode recommended)
 cmake --build . --config Release
@@ -95,7 +95,7 @@ your_project/
     Live2DCubismCore.dll   <-- copy here
 ```
 
-You can automate this with a Lime `<assets>` tag or a post-build script.
+You can automate this with a post-build script.
 
 ## Step 5: Prepare Live2D Model Assets
 
@@ -119,7 +119,7 @@ assets/
 
 Make sure the assets are included in your `Project.xml`:
 ```xml
-<assets path="assets/live2d" rename="live2d" />
+<assets path="assets/live2d" rename="assets/live2d" />
 ```
 
 ## Usage
@@ -329,10 +329,9 @@ In your `Project.xml`:
 <haxelib name="flixel" />
 <haxelib name="openfl" />
 <haxelib name="live2d-haxe" />
-
-<!-- Must target cpp -->
-<haxedef name="cpp" />
 ```
+
+Make sure your project targets Windows x64.
 
 ## Build Configuration for the Native DLL
 

@@ -61,8 +61,8 @@ cd native
 mkdir build
 cd build
 
-# 使用 CMake 配置，指向你的 Cubism SDK
-cmake .. -DCUBISM_ROOT="C:/SDK/CubismSdkForNative-5-r.5"
+# 使用 CMake 配置，指向你的 Cubism SDK，指定 x64 架构
+cmake .. -DCUBISM_ROOT="C:/SDK/CubismSdkForNative-5-r.5" -A x64
 
 # 构建（推荐 Release 模式）
 cmake --build . --config Release
@@ -95,7 +95,7 @@ your_project/
     Live2DCubismCore.dll   <-- 复制到这里
 ```
 
-可通过 Lime 的 `<assets>` 标签或构建后脚本自动化。
+可通过构建后脚本自动化。
 
 ## 第 5 步：准备 Live2D 模型资源
 
@@ -119,7 +119,7 @@ assets/
 
 确保在 `Project.xml` 中包含资源：
 ```xml
-<assets path="assets/live2d" rename="live2d" />
+<assets path="assets/live2d" rename="assets/live2d" />
 ```
 
 ## 用法
@@ -329,10 +329,9 @@ var isVisible = L2D.isDrawableVisible(model, 0);
 <haxelib name="flixel" />
 <haxelib name="openfl" />
 <haxelib name="live2d-haxe" />
-
-<!-- 必须以 cpp 为目标 -->
-<haxedef name="cpp" />
 ```
+
+请确保你的项目目标平台为 windows x64。
 
 ## 原生 DLL 构建配置
 
