@@ -1,0 +1,16 @@
+{
+  "name": "live2d-haxe",
+  "url": "https://github.com/Dingdang255/live2d-haxe",
+  "license": "MIT",
+  "tags": ["live2d", "cubism", "flixel", "openfl", "cpp", "native"],
+  "description": "Live2D Cubism SDK integration for Haxe/Flixel - CalcOnly rendering via OpenFL drawTriangles",
+  "version": "0.1.0",
+  "classPath": "src",
+  "releasenote": "Initial release",
+  "contributors": ["Dingdang255"],
+  "dependencies": {
+    "flixel": "4.11.0",
+    "openfl": "9.2.1",
+    "hxcpp": "4.2.1"
+  }
+}

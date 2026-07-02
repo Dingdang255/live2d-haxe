@@ -1,0 +1,8 @@
+# live2d-haxe extra compilation parameters
+# Automatically applied when using -lib live2d-haxe
+
+# Only supported on cpp target (Windows x64)
+-D live2d_haxe
+
+# cpp target is required
+# The library uses GetProcAddress and cpp.Int64 which are cpp-only

@@ -1,0 +1,188 @@
+package;
+
+import flixel.FlxG;
+import flixel.FlxState;
+import flixel.text.FlxText;
+import flixel.math.FlxPoint;
+import live2d.cubism.L2DComponent;
+import live2d.cubism.L2DManager;
+import live2d.cubism.L2D;
+
+/**
+ * Demo state showing basic Live2D Cubism usage with Flixel.
+ *
+ * Controls:
+ *   - Click on model hit areas to trigger motions
+ *   - Hold mouse (non-Ctrl): Eye tracking
+ *   - Ctrl + drag: Move model position
+ *   - Mouse wheel: Scale model (Shift for faster)
+ *   - E: Random expression
+ *   - M: Play motion
+ *   - LEFT/RIGHT: Switch model
+ */
+class L2DDemoState extends FlxState
+{
+    var modelList:Array<String> = ['Haru', 'Hiyori', 'Mao', 'Mark', 'Natori', 'Rice'];
+    var currentModelIndex:Int = 0;
+
+    var l2d:L2DComponent;
+    var infoText:FlxText;
+    var statusText:FlxText;
+    var dragging:Bool = false;
+    var dragOffset:FlxPoint;
+
+    override public function create()
+    {
+        super.create();
+        FlxG.mouse.visible = true;
+        dragOffset = FlxPoint.get();
+
+        // Info text
+        infoText = new FlxText(10, 10, FlxG.width - 20,
+            'Live2D Haxe Demo\n'
+            + 'Click: Hit test + motion\n'
+            + 'Hold mouse: Eye tracking\n'
+            + 'Ctrl + drag: Move model\n'
+            + 'Wheel: Scale (Shift=fast)\n'
+            + 'E: Expression | M: Motion\n'
+            + 'LEFT/RIGHT: Switch model'
+        );
+        infoText.setFormat(null, 14, 0xFFFFFFFF);
+        add(infoText);
+
+        statusText = new FlxText(10, 170, FlxG.width - 20, '');
+        statusText.setFormat(null, 12, 0xFFCCCCCC);
+        add(statusText);
+
+        loadModel(currentModelIndex);
+    }
+
+    function loadModel(index:Int)
+    {
+        // Remove old model
+        if (l2d != null)
+        {
+            FlxG.removeChild(l2d.getSprite());
+            L2DManager.destroy(l2d);
+            l2d = null;
+        }
+
+        var modelName = modelList[index];
+        l2d = L2DManager.create('assets/live2d/$modelName/', '$modelName.model3.json');
+
+        if (l2d.model.notNull())
+        {
+            l2d.x = FlxG.width / 2;
+            l2d.y = FlxG.height / 2;
+            l2d.scale = (FlxG.height * 0.8) / l2d.modelHeight;
+
+            FlxG.addChildBelowMouse(l2d.getSprite());
+            l2d.startIdleMotion();
+
+            statusText.text = 'Model: $modelName | Scale: ${l2d.scale:.1f} | Bounds: ${l2d.modelWidth} x ${l2d.modelHeight}';
+        }
+        else
+        {
+            statusText.text = 'ERROR: Failed to load model $modelName';
+        }
+    }
+
+    override public function update(elapsed:Float)
+    {
+        super.update(elapsed);
+
+        // Model switching
+        if (FlxG.keys.justPressed.LEFT)
+        {
+            currentModelIndex--;
+            if (currentModelIndex < 0) currentModelIndex = modelList.length - 1;
+            loadModel(currentModelIndex);
+        }
+        if (FlxG.keys.justPressed.RIGHT)
+        {
+            currentModelIndex++;
+            if (currentModelIndex >= modelList.length) currentModelIndex = 0;
+            loadModel(currentModelIndex);
+        }
+
+        if (l2d == null || l2d.model.isNull()) return;
+
+        // Update and render
+        L2DManager.updateAll(elapsed);
+        L2DManager.renderAll();
+
+        // Eye tracking (non-Ctrl mouse hold)
+        if (FlxG.mouse.pressed && !FlxG.keys.pressed.CONTROL)
+        {
+            l2d.setDragging(FlxG.mouse.x, FlxG.mouse.y);
+        }
+        else
+        {
+            l2d.setDragging(l2d.x, l2d.y);
+        }
+
+        // Hit test on click
+        if (FlxG.mouse.justPressed && !FlxG.keys.pressed.CONTROL)
+        {
+            var areas = ['Head', 'Body', 'Hair'];
+            for (area in areas)
+            {
+                if (l2d.hitTest(area, FlxG.mouse.x, FlxG.mouse.y))
+                {
+                    trace('[Demo] Hit: $area');
+                    l2d.startMotion('TapBody', 0, 3);
+                    break;
+                }
+            }
+        }
+
+        // Ctrl + drag: move model position
+        if (FlxG.mouse.justPressed && FlxG.keys.pressed.CONTROL)
+        {
+            dragging = true;
+            dragOffset.set(l2d.x - FlxG.mouse.x, l2d.y - FlxG.mouse.y);
+        }
+        if (dragging && FlxG.mouse.pressed)
+        {
+            l2d.x = dragOffset.x + FlxG.mouse.x;
+            l2d.y = dragOffset.y + FlxG.mouse.y;
+        }
+        if (FlxG.mouse.justReleased)
+        {
+            dragging = false;
+        }
+
+        // Mouse wheel: scale
+        if (FlxG.mouse.wheel != 0)
+        {
+            var s = l2d.scale;
+            s += FlxG.mouse.wheel * (6 * (FlxG.keys.pressed.SHIFT ? 3 : 1));
+            if (s < (FlxG.height * 0.8) / l2d.modelHeight) s = (FlxG.height * 0.8) / l2d.modelHeight;
+            l2d.scale = s;
+            statusText.text = 'Model: ${modelList[currentModelIndex]} | Scale: ${l2d.scale:.1f}';
+        }
+
+        // Keyboard
+        #if FLX_KEYBOARD
+        if (FlxG.keys.justPressed.E)
+        {
+            l2d.setRandomExpression();
+        }
+        if (FlxG.keys.justPressed.M)
+        {
+            l2d.startMotion('TapBody', 0, 3);
+        }
+        #end
+    }
+
+    override public function destroy()
+    {
+        if (l2d != null && l2d.getSprite() != null)
+        {
+            FlxG.removeChild(l2d.getSprite());
+        }
+        L2DManager.destroyAll();
+        FlxG.mouse.visible = false;
+        super.destroy();
+    }
+}

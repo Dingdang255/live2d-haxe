@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project>
+    <!-- Live2D Haxe Demo - Test Project -->
+    
+    <!-- Meta -->
+    <meta title="L2D Demo" package="live2d.haxe.demo" version="0.1.0" />
+    
+    <!-- Window -->
+    <app main="Main" file="L2DDemo" />
+    <window width="1280" height="720" fps="60" background="#1a1a2e" />
+    
+    <!-- Libraries -->
+    <haxelib name="flixel" />
+    <haxelib name="live2d-haxe" />
+    
+    <!-- Target: cpp (lime test windows selects cpp automatically) -->
+
+    <!-- Source paths -->
+    <source path="." />
+    
+    <!-- Live2D model assets -->
+    <assets path="assets/live2d" rename="assets/live2d" />
+    
+    <!-- Copy DLLs to output directory -->
+    <section if="windows">
+        <postbuild open="copy.bat"/>
+    </section>
+</project>
