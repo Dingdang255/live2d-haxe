@@ -19,7 +19,7 @@ Live2D Cubism SDK 的 Haxe/Flixel 集成 —— 基于 CalcOnly 渲染，通过 
 ```
 +-------------------+     GetProcAddress      +------------------+
 |   Haxe/Flixel     | <=====================> |  live2d_capi.dll |
-|   (渲染)           |    函数指针             |  (计算)           |
+|   (渲染)          |    函数指针              |  (计算)          |
 +-------------------+                         +------------------+
                                                        |
                                                        | 链接
@@ -58,7 +58,8 @@ Cubism SDK **未包含**在本库中。你需要自行下载并同意 Live2D 许
 
 ```bash
 cd native
-mkdir build && cd build
+mkdir build
+cd build
 
 # 使用 CMake 配置，指向你的 Cubism SDK
 cmake .. -DCUBISM_ROOT="C:/SDK/CubismSdkForNative-5-r.5"
@@ -365,3 +366,6 @@ https://www.live2d.com/download/cubism-sdk/download-native/
 ## 致谢
 
 - 基于 Live2D Inc. 的 Live2D Cubism SDK for Native
+- 演示视频使用了 Live2D 示例模型（Haru、Hiyori、Mao、Mark、Natori、Rice）。这些角色的著作权归 Live2D Inc. 所有，按照 [Live2D 免费素材许可协议](https://www.live2d.com/eula/live2d-free-material-license-agreement_jp.html) 及 [示例数据使用条款](https://www.live2d.com/learn/sample/model-terms/) 使用。
+
+> 本作品のキャラクターには株式会社Live2Dの著作物であるサンプルデータが株式会社Live2Dの定める規約に従って用いられています。本作品は制作者の完全な自己の裁量で制作されています。

@@ -58,7 +58,8 @@ The Cubism SDK is **NOT** included in this library. You must download it separat
 
 ```bash
 cd native
-mkdir build && cd build
+mkdir build
+cd build
 
 # Configure with CMake, pointing to your Cubism SDK
 cmake .. -DCUBISM_ROOT="C:/SDK/CubismSdkForNative-5-r.5"
@@ -365,3 +366,6 @@ https://www.live2d.com/download/cubism-sdk/download-native/
 ## Acknowledgments
 
 - Based on the Live2D Cubism SDK for Native by Live2D Inc.
+- Demo video uses Live2D sample models (Haru, Hiyori, Mao, Mark, Natori, Rice). These characters are copyrighted by Live2D Inc. and used in accordance with the [Live2D Free Material License Agreement](https://www.live2d.com/eula/live2d-free-material-license-agreement_en.html) and [Sample Data Terms of Use](https://www.live2d.com/learn/sample/model-terms/).
+
+> 本作品のキャラクターには株式会社Live2Dの著作物であるサンプルデータが株式会社Live2Dの定める規約に従って用いられています。本作品は制作者の完全な自己の裁量で制作されています。
