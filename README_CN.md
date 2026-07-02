@@ -10,7 +10,11 @@ Live2D Cubism SDK 的 Haxe/Flixel 集成 —— 基于 CalcOnly 渲染，通过 
 
 ## 演示
 
-<video src="docs/test.mp4" controls width="600"></video>
+<div align="center">
+    <h1>
+        <video src="./docs/test.mp4" controls width="600"></video>
+    </h1>
+</div>
 
 > 演示了模型切换、点击命中测试、表情切换、动作播放、视线追踪和缩放。
 
