@@ -351,9 +351,10 @@ cmake .. -DCUBISM_ROOT="D:/SDK/CubismSdkForNative-5-r.5"
 
 - **仅 Windows x64** — 使用 Windows 特有的 `GetProcAddress` 和 `LoadLibraryA`
 - **不支持 macOS/Linux** — `@:cppFileCode` 块使用了 `<windows.h>`
-- **CalcOnly 渲染** — C++ 端不做 GPU 渲染；所有绘制通过 OpenFL 的 CPU/软件三角形光栅化
-- **无着色器效果** — 未实现 Cubism 的正片叠底/滤色混合
-- **遮罩性能** — 每 drawable 独立 Sprite 遮罩，在大量遮罩 drawable 时可能较慢
+- **CalcOnly 渲染** — C++ 端不做 GPU 渲染；所有绘制通过 OpenFL 的 `drawTriangles`（GPU 加速）
+- **正片叠底/滤色混合** — 通过 ColorTransform 实现，非 GPU 着色器；非默认颜色的 drawable 无法合批
+- **批量渲染** — renderOrder 中连续且状态相同（纹理、混合模式、遮罩组、默认颜色）的 drawable 合并为一次 draw call。典型模型 draw call 从 ~130 降至 ~16-24
+- **遮罩性能** — 共享同一遮罩组的 drawable 共用一个遮罩 Sprite（stencil 方式）
 
 ## 许可证
 

@@ -351,9 +351,10 @@ cmake .. -DCUBISM_ROOT="D:/SDK/CubismSdkForNative-5-r.5"
 
 - **Windows x64 only** - Uses Windows-specific `GetProcAddress` and `LoadLibraryA`
 - **No macOS/Linux support** - The `@:cppFileCode` block uses `<windows.h>`
-- **CalcOnly rendering** - C++ side does no GPU rendering; all drawing is via OpenFL's CPU/software triangle rasterization
-- **No shader effects** - Cubism's multiply/screen color blending is not implemented
-- **Mask performance** - Per-drawable Sprite masking may be slow with many masked drawables
+- **CalcOnly rendering** - C++ side does no GPU rendering; all drawing is via OpenFL's `drawTriangles` (GPU-accelerated)
+- **Multiply/Screen blending** - Applied via `ColorTransform`, not GPU shaders; drawables with non-default colors cannot be batched
+- **Batched rendering** - Consecutive drawables sharing the same state (texture, blendMode, mask group, default color) are merged into one draw call. Draw calls reduced from ~130 to ~16-24 for typical models.
+- **Mask performance** - Masked drawables sharing the same mask group use a single shared mask Sprite via stencil
 
 ## License
 

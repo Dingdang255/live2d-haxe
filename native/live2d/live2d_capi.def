@@ -29,6 +29,9 @@ EXPORTS
     l2d_get_drawable_render_order__2 = l2d_get_drawable_render_order
     l2d_get_drawable_texture_index__2 = l2d_get_drawable_texture_index
     l2d_is_drawable_visible__2 = l2d_is_drawable_visible
+    l2d_get_drawable_multiply_color__3 = l2d_get_drawable_multiply_color
+    l2d_get_drawable_screen_color__3 = l2d_get_drawable_screen_color
+    l2d_get_drawable_blend_mode__2 = l2d_get_drawable_blend_mode
     l2d_get_drawable_mask_count__2 = l2d_get_drawable_mask_count
     l2d_get_drawable_masks__3 = l2d_get_drawable_masks
     l2d_get_texture_count__1 = l2d_get_texture_count

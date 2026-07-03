@@ -4,9 +4,9 @@
   "license": "MIT",
   "tags": ["live2d", "cubism", "flixel", "openfl", "cpp", "native"],
   "description": "Live2D Cubism SDK integration for Haxe/Flixel - CalcOnly rendering via OpenFL drawTriangles",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "classPath": "src",
-  "releasenote": "Initial release",
+  "releasenote": "Batched rendering, blend modes, multiply/screen color, texture cache fix",
   "contributors": ["Dingdang255"],
   "dependencies": {
     "flixel": "4.11.0",

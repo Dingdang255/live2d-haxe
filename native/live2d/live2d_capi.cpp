@@ -272,6 +272,35 @@ L2D_API bool l2d_is_drawable_visible(L2D_Model m, int drawableIndex)
     return model->GetDrawableDynamicFlagIsVisible(drawableIndex);
 }
 
+L2D_API void l2d_get_drawable_multiply_color(L2D_Model m, int drawableIndex, float* outRGBA)
+{
+    if (m == NULL || outRGBA == NULL) return;
+    CubismModel* model = GetModel(m)->GetModel();
+    auto color = model->GetDrawableMultiplyColor(drawableIndex);
+    outRGBA[0] = color.X;
+    outRGBA[1] = color.Y;
+    outRGBA[2] = color.Z;
+    outRGBA[3] = color.W;
+}
+
+L2D_API void l2d_get_drawable_screen_color(L2D_Model m, int drawableIndex, float* outRGBA)
+{
+    if (m == NULL || outRGBA == NULL) return;
+    CubismModel* model = GetModel(m)->GetModel();
+    auto color = model->GetDrawableScreenColor(drawableIndex);
+    outRGBA[0] = color.X;
+    outRGBA[1] = color.Y;
+    outRGBA[2] = color.Z;
+    outRGBA[3] = color.W;
+}
+
+L2D_API int l2d_get_drawable_blend_mode(L2D_Model m, int drawableIndex)
+{
+    if (m == NULL) return 0;
+    CubismModel* model = GetModel(m)->GetModel();
+    return model->GetDrawableBlendModeType(drawableIndex).GetColorBlendType();
+}
+
 // ===== Mask =====
 
 L2D_API int l2d_get_drawable_mask_count(L2D_Model m, int drawableIndex)

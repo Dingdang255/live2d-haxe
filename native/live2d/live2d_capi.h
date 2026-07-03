@@ -67,6 +67,9 @@ L2D_API float l2d_get_drawable_opacity(L2D_Model m, int drawableIndex);
 L2D_API int   l2d_get_drawable_render_order(L2D_Model m, int drawableIndex);
 L2D_API int   l2d_get_drawable_texture_index(L2D_Model m, int drawableIndex);
 L2D_API bool  l2d_is_drawable_visible(L2D_Model m, int drawableIndex);
+L2D_API void  l2d_get_drawable_multiply_color(L2D_Model m, int drawableIndex, float* outRGBA);
+L2D_API void  l2d_get_drawable_screen_color(L2D_Model m, int drawableIndex, float* outRGBA);
+L2D_API int   l2d_get_drawable_blend_mode(L2D_Model m, int drawableIndex);
 
 // ===== Mask =====
 L2D_API int  l2d_get_drawable_mask_count(L2D_Model m, int drawableIndex);

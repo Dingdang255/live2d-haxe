@@ -30,6 +30,9 @@ struct L2DFunctions {
     int (*get_drawable_render_order)(void*, int);
     int (*get_drawable_texture_index)(void*, int);
     bool (*is_drawable_visible)(void*, int);
+    void (*get_drawable_multiply_color)(void*, int, float*);
+    void (*get_drawable_screen_color)(void*, int, float*);
+    int (*get_drawable_blend_mode)(void*, int);
     int (*get_texture_count)(void*);
     void (*get_texture_path)(void*, int, char*, int);
     float (*get_canvas_width)(void*);
@@ -73,6 +76,9 @@ static void l2d_ensure_loaded() {
     L2D_LOAD(get_drawable_render_order);
     L2D_LOAD(get_drawable_texture_index);
     L2D_LOAD(is_drawable_visible);
+    L2D_LOAD(get_drawable_multiply_color);
+    L2D_LOAD(get_drawable_screen_color);
+    L2D_LOAD(get_drawable_blend_mode);
     L2D_LOAD(get_texture_count);
     L2D_LOAD(get_texture_path);
     L2D_LOAD(get_canvas_width);
@@ -243,6 +249,21 @@ class L2D
     public static function isDrawableVisible(model:L2DModel, i:Int):Bool
     {
         return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.is_drawable_visible ? l2dFn.is_drawable_visible(M((cpp::Int64){0}), {1}) : false)', m(model), i);
+    }
+
+    public static function getDrawableMultiplyColor(model:L2DModel, i:Int, out:Bytes):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.get_drawable_multiply_color) l2dFn.get_drawable_multiply_color(M((cpp::Int64){0}), {1}, (float*)({2}->b.mPtr->GetBase()))', m(model), i, out);
+    }
+
+    public static function getDrawableScreenColor(model:L2DModel, i:Int, out:Bytes):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.get_drawable_screen_color) l2dFn.get_drawable_screen_color(M((cpp::Int64){0}), {1}, (float*)({2}->b.mPtr->GetBase()))', m(model), i, out);
+    }
+
+    public static function getDrawableBlendMode(model:L2DModel, i:Int):Int
+    {
+        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.get_drawable_blend_mode ? l2dFn.get_drawable_blend_mode(M((cpp::Int64){0}), {1}) : 0)', m(model), i);
     }
 
     // ===== Mask =====
