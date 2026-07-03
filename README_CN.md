@@ -2,11 +2,13 @@
 
 [English](./README.md)
 
-Live2D Cubism SDK 的 Haxe/Flixel 集成 —— 基于 CalcOnly 渲染，通过 OpenFL drawTriangles 绘制。
+Live2D Cubism SDK for Haxe —— 多后端渲染抽象层，基于 CalcOnly 架构。
 
-本库为 Haxe/Flixel 项目提供独立、可复用的 Live2D Cubism 集成。采用 "CalcOnly" 方案：C++ 端仅负责参数计算（物理、动作、表情等），Haxe 端通过 OpenFL 的 `Sprite.graphics.drawTriangles()` 完成全部渲染。
+本库为 Haxe 项目提供独立、可复用的 Live2D Cubism 集成。采用 "CalcOnly" 方案：C++ 端仅负责参数计算（物理、动作、表情等），Haxe 端通过可插拔的后端接口完成全部渲染。
 
-**目标平台：** 仅 Windows x64（cpp 目标）
+**当前目标平台：** Windows x64（cpp 目标） | **架构：** 多后端（内置 OpenFL/Flixel，可扩展至其他框架）
+
+详见 [ARCHITECTURE.md](./ARCHITECTURE.md) 架构文档和 [BACKEND_GUIDE.md](./BACKEND_GUIDE.md) 新后端开发指南。
 
 ## 演示
 
@@ -17,22 +19,29 @@ Live2D Cubism SDK 的 Haxe/Flixel 集成 —— 基于 CalcOnly 渲染，通过 
 ## 架构
 
 ```
-+-------------------+     GetProcAddress      +------------------+
-|   Haxe/Flixel     | <=====================> |  live2d_capi.dll |
-|   (渲染)          |    函数指针              |  (计算)          |
-+-------------------+                         +------------------+
-                                                       |
-                                                       | 链接
-                                                       v
-                                              +------------------+
-                                              | Live2DCubismCore |
-                                              |    .dll + SDK    |
-                                              +------------------+
+┌─────────────────────────────────────────────────────┐
+│  框架集成层                                          │
+│  L2DFlixelComponent / L2DHeapsObject / ...          │
+├─────────────────────────────────────────────────────┤
+│  核心逻辑层                                          │
+│  L2DCore（平台无关）                                  │
+├─────────────────────────────────────────────────────┤
+│  后端接口层                                          │
+│  IL2DRenderer  ·  ICubismBridge                     │
+├─────────────────────────────────────────────────────┤
+│  后端实现层                                          │
+│  OpenFLRenderer · HxcppWindowsBridge · (未来: ...)   │
+└─────────────────────────────────────────────────────┘
+         ↕ ICubismBridge (GetProcAddress/dlopen/...)
+    live2d_capi.dll/.so/.dylib → Live2DCubismCore
 ```
 
-- **C++ 原生层**（`live2d_capi.dll`）：封装 Cubism SDK 的扁平 C API。仅执行参数/动作计算，不做 OpenGL/DirectX 渲染。
-- **Haxe 层**（`live2d.cubism`）：从 C++ 读取 drawable 数据（顶点、UV、索引、透明度），通过 OpenFL 的 `drawTriangles()` 渲染。
-- **GetProcAddress**：运行时通过 `GetProcAddress` 加载函数指针，绕过 hxcpp FFI（避免崩溃）。
+- **C++ 原生层**（`live2d_capi.dll`）：封装 Cubism SDK 的扁平 C API。仅执行参数/动作计算，不做 GPU 渲染。
+- **核心逻辑层**（`L2DCore`）：平台无关的批处理构建、遮罩分组、顶点变换和渲染调度。
+- **后端接口层**（`IL2DRenderer`、`ICubismBridge`）：渲染和原生访问的契约接口，支持多后端。
+- **后端实现层**：`OpenFLRenderer`（drawTriangles）、`HxcppWindowsBridge`（GetProcAddress）。添加新后端只需实现这两个接口。
+
+详见 [ARCHITECTURE.md](./ARCHITECTURE.md) 完整架构说明和 [BACKEND_GUIDE.md](./BACKEND_GUIDE.md) 新后端开发指南。
 
 ## 前置条件
 
@@ -349,12 +358,11 @@ cmake .. -DCUBISM_ROOT="D:/SDK/CubismSdkForNative-5-r.5"
 
 ## 已知限制
 
-- **仅 Windows x64** — 使用 Windows 特有的 `GetProcAddress` 和 `LoadLibraryA`
-- **不支持 macOS/Linux** — `@:cppFileCode` 块使用了 `<windows.h>`
-- **CalcOnly 渲染** — C++ 端不做 GPU 渲染；所有绘制通过 OpenFL 的 `drawTriangles`（GPU 加速）
-- **正片叠底/滤色混合** — 通过 ColorTransform 实现，非 GPU 着色器；非默认颜色的 drawable 无法合批
-- **批量渲染** — renderOrder 中连续且状态相同（纹理、混合模式、遮罩组、默认颜色）的 drawable 合并为一次 draw call。典型模型 draw call 从 ~130 降至 ~16-24
-- **遮罩性能** — 共享同一遮罩组的 drawable 共用一个遮罩 Sprite（stencil 方式）
+- **仅 Windows x64**（当前桥接层）— `HxcppWindowsBridge` 使用 Windows 特有的 `GetProcAddress`/`LoadLibraryA`。Linux/macOS 支持需要使用 `dlopen`/`dlsym` 实现新的桥接层。
+- **CalcOnly 渲染** — C++ 端不做 GPU 渲染；所有绘制通过渲染后端完成（如 OpenFL 的 `drawTriangles`，GPU 加速）。
+- **正片叠底/滤色混合** — 通过 ColorTransform 实现（OpenFL 后端），非 GPU 着色器；非默认颜色的 drawable 无法合批。
+- **批量渲染** — renderOrder 中连续且状态相同（纹理、混合模式、遮罩组、默认颜色）的 drawable 合并为一次 draw call。典型模型 draw call 从 ~130 降至 ~16-24。
+- **遮罩性能** — 共享同一遮罩组的 drawable 共用一个遮罩显示对象（根据后端使用 stencil 或 alpha 方式）。
 
 ## 许可证
 

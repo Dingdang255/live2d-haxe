@@ -2,11 +2,13 @@
 
 [中文](./README_CN.md)
 
-Live2D Cubism SDK integration for Haxe/Flixel - CalcOnly rendering via OpenFL drawTriangles.
+Live2D Cubism SDK for Haxe - multi-backend rendering abstraction with CalcOnly architecture.
 
-This library provides a standalone, reusable Live2D Cubism integration for Haxe/Flixel projects. It uses a "CalcOnly" approach where the C++ side only handles parameter calculation (physics, motion, expressions, etc.) while the Haxe side handles all rendering via OpenFL's `Sprite.graphics.drawTriangles()`.
+This library provides a standalone, reusable Live2D Cubism integration for Haxe projects. It uses a "CalcOnly" approach where the C++ side only handles parameter calculation (physics, motion, expressions, etc.) while the Haxe side handles all rendering through a pluggable backend interface.
 
-**Target:** Windows x64 only (cpp target)
+**Current target:** Windows x64 (cpp target) | **Architecture:** Multi-backend (OpenFL/Flixel built-in, extensible to other frameworks)
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed architecture docs and [BACKEND_GUIDE.md](./BACKEND_GUIDE.md) for adding new backends.
 
 ## Demo
 
@@ -17,22 +19,29 @@ This library provides a standalone, reusable Live2D Cubism integration for Haxe/
 ## Architecture
 
 ```
-+-------------------+     GetProcAddress      +------------------+
-|   Haxe/Flixel     | <=====================> |  live2d_capi.dll |
-|   (Rendering)     |    function pointers    |  (Calculation)   |
-+-------------------+                         +------------------+
-                                                       |
-                                                       | links
-                                                       v
-                                              +------------------+
-                                              | Live2DCubismCore |
-                                              |    .dll + SDK    |
-                                              +------------------+
+┌─────────────────────────────────────────────────────┐
+│  Framework Integration                               │
+│  L2DFlixelComponent / L2DHeapsObject / ...          │
+├─────────────────────────────────────────────────────┤
+│  Core Logic                                          │
+│  L2DCore (platform-independent)                      │
+├─────────────────────────────────────────────────────┤
+│  Backend Interfaces                                  │
+│  IL2DRenderer  ·  ICubismBridge                     │
+├─────────────────────────────────────────────────────┤
+│  Backend Implementations                             │
+│  OpenFLRenderer · HxcppWindowsBridge · (future: ...)│
+└─────────────────────────────────────────────────────┘
+         ↕ ICubismBridge (GetProcAddress/dlopen/...)
+    live2d_capi.dll/.so/.dylib → Live2DCubismCore
 ```
 
 - **C++ Native Layer** (`live2d_capi.dll`): Flat C API wrapping the Cubism SDK. Only performs parameter/motion calculation, no OpenGL/DirectX rendering.
-- **Haxe Layer** (`live2d.cubism`): Reads drawable data (vertices, UVs, indices, opacity) from C++ and renders via OpenFL's `drawTriangles()`.
-- **GetProcAddress**: Function pointers are loaded at runtime via `GetProcAddress`, bypassing hxcpp FFI (which causes crashes).
+- **Core Logic Layer** (`L2DCore`): Platform-independent batch building, mask grouping, vertex transformation, and render orchestration.
+- **Backend Interfaces** (`IL2DRenderer`, `ICubismBridge`): Contracts for rendering and native access, enabling multi-backend support.
+- **Backend Implementations**: `OpenFLRenderer` (drawTriangles), `HxcppWindowsBridge` (GetProcAddress). Adding a new backend only requires implementing these two interfaces.
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for full details and [BACKEND_GUIDE.md](./BACKEND_GUIDE.md) for adding new backends.
 
 ## Prerequisites
 
@@ -349,12 +358,11 @@ cmake .. -DCUBISM_ROOT="D:/SDK/CubismSdkForNative-5-r.5"
 
 ## Limitations
 
-- **Windows x64 only** - Uses Windows-specific `GetProcAddress` and `LoadLibraryA`
-- **No macOS/Linux support** - The `@:cppFileCode` block uses `<windows.h>`
-- **CalcOnly rendering** - C++ side does no GPU rendering; all drawing is via OpenFL's `drawTriangles` (GPU-accelerated)
-- **Multiply/Screen blending** - Applied via `ColorTransform`, not GPU shaders; drawables with non-default colors cannot be batched
+- **Windows x64 only** (current bridge) - `HxcppWindowsBridge` uses Windows-specific `GetProcAddress`/`LoadLibraryA`. Linux/macOS support requires a new bridge implementation using `dlopen`/`dlsym`.
+- **CalcOnly rendering** - C++ side does no GPU rendering; all drawing is via the rendering backend (e.g., OpenFL's `drawTriangles` with GPU acceleration).
+- **Multiply/Screen blending** - Applied via `ColorTransform` (OpenFL backend), not GPU shaders; drawables with non-default colors cannot be batched.
 - **Batched rendering** - Consecutive drawables sharing the same state (texture, blendMode, mask group, default color) are merged into one draw call. Draw calls reduced from ~130 to ~16-24 for typical models.
-- **Mask performance** - Masked drawables sharing the same mask group use a single shared mask Sprite via stencil
+- **Mask performance** - Masked drawables sharing the same mask group use a single shared mask display object (stencil/alpha-based depending on backend).
 
 ## License
 
