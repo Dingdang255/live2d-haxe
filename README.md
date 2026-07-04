@@ -47,12 +47,14 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for full details and [BACKEND_GUIDE.md]
 
 - Haxe 4.2.5+
 - hxcpp 4.2.1+
-- Lime 8.0.1+
-- OpenFL 9.2.1+
-- Flixel 4.11.0+
 - CMake 3.16+
 - Visual Studio 2019/2022 (for native C++ compilation)
 - **Cubism SDK for Native 5-r.5** (NOT bundled - see below)
+
+For the Flixel/OpenFL backend (current default):
+- Lime 8.0.1+
+- OpenFL 9.2.1+
+- Flixel 4.11.0+
 
 ## Step 1: Download the Cubism SDK
 
@@ -63,7 +65,7 @@ The Cubism SDK is **NOT** included in this library. You must download it separat
 3. Extract to a directory, e.g., `C:/SDK/CubismSdkForNative-5-r.5/`
 4. Make sure the directory contains `Framework/src/` and `Core/` subdirectories
 
-## Step 2: Compile the Native DLL
+## Step 2: Compile the Native DLL (Windows x64)
 
 ```bash
 cd native
@@ -92,7 +94,7 @@ haxelib dev live2d-haxe /path/to/live2d-haxe
 haxelib install live2d-haxe
 ```
 
-## Step 4: Copy DLLs to Your Project
+## Step 4: Copy DLLs to Your Project (Windows)
 
 The DLLs must be accessible at runtime. Copy them to your project's output directory:
 
@@ -131,24 +133,24 @@ Make sure the assets are included in your `Project.xml`:
 <assets path="assets/live2d" rename="assets/live2d" />
 ```
 
-## Usage
+## Usage (Flixel/OpenFL Backend)
 
-### Basic: Single Model with L2DComponent
+### Basic: Single Model with L2DFlixelComponent
 
 ```haxe
-import live2d.cubism.L2DComponent;
+import live2d.cubism.flixel.L2DFlixelComponent;
 import openfl.display.Sprite;
 
 class MyState extends FlxState
 {
-    var l2d:L2DComponent;
+    var l2d:L2DFlixelComponent;
     
     override public function create()
     {
         super.create();
         
         // Load a Live2D model
-        l2d = new L2DComponent('assets/live2d/Haru/', 'Haru.model3.json');
+        l2d = new L2DFlixelComponent('assets/live2d/Haru/', 'Haru.model3.json');
         
         // Position and scale
         l2d.x = FlxG.width / 2;
@@ -183,23 +185,24 @@ class MyState extends FlxState
 }
 ```
 
-### Multiple Models with L2DManager
+### Multiple Models with L2DFlixelManager
 
 ```haxe
-import live2d.cubism.L2DManager;
+import live2d.cubism.flixel.L2DFlixelComponent;
+import live2d.cubism.flixel.L2DFlixelManager;
 
 class MyState extends FlxState
 {
-    var bg:L2DComponent;
-    var character:L2DComponent;
+    var bg:L2DFlixelComponent;
+    var character:L2DFlixelComponent;
     
     override public function create()
     {
         super.create();
         
-        // L2DManager handles framework init and texture caching
-        bg = L2DManager.create('assets/live2d/Background/', 'bg.model3.json');
-        character = L2DManager.create('assets/live2d/Haru/', 'Haru.model3.json');
+        // L2DFlixelManager handles framework init and texture caching
+        bg = L2DFlixelManager.create('assets/live2d/Background/', 'bg.model3.json');
+        character = L2DFlixelManager.create('assets/live2d/Haru/', 'Haru.model3.json');
         
         // Add sprites
         FlxG.stage.addChild(bg.getSprite());
@@ -210,13 +213,13 @@ class MyState extends FlxState
     {
         super.update(elapsed);
         
-        L2DManager.updateAll(elapsed);
-        L2DManager.renderAll();
+        L2DFlixelManager.updateAll(elapsed);
+        L2DFlixelManager.renderAll();
     }
     
     override public function destroy()
     {
-        L2DManager.destroyAll();
+        L2DFlixelManager.destroyAll();
         super.destroy();
     }
 }
@@ -230,7 +233,7 @@ class MyState extends FlxState
 var handle = l2d.startMotion('TapBody', 0, 3);
 
 // Check if motion is finished
-if (l2d.model.notNull() && L2D.isMotionFinished(l2d.model, handle))
+if (l2d.model.notNull() && CubismAPI.isMotionFinished(l2d.model, handle))
 {
     trace('Motion finished!');
 }
@@ -267,38 +270,56 @@ if (FlxG.mouse.pressed)
 }
 ```
 
-### Low-Level API (L2D class)
+### Low-Level API (CubismAPI)
 
-For advanced use, the `L2D` class provides direct access to all C API functions:
+For advanced use, the `CubismAPI` class provides direct access to all C API functions:
 
 ```haxe
-import live2d.cubism.L2D;
-import live2d.cubism.L2DModel;
+import live2d.cubism.core.CubismAPI;
+import live2d.cubism.core.L2DModel;
 
 // Framework lifecycle
-L2D.frameworkStartUp();
+CubismAPI.frameworkStartUp();
 
 // Model lifecycle
-var model:L2DModel = L2D.loadModel('assets/live2d/Haru/', 'Haru.model3.json');
-L2D.update(model);
-L2D.releaseModel(model);
+var model:L2DModel = CubismAPI.loadModel('assets/live2d/Haru/', 'Haru.model3.json');
+CubismAPI.update(model);
+CubismAPI.releaseModel(model);
 
 // Parameters
-var paramCount = L2D.getParameterCount(model);
-var eyeXIndex = L2D.findParameterIndex(model, 'ParamEyeBallX');
-var eyeXValue = L2D.getParameterValue(model, eyeXIndex);
-L2D.setParameterValue(model, eyeXIndex, 0.5, 1.0);
+var paramCount = CubismAPI.getParameterCount(model);
+var eyeXIndex = CubismAPI.findParameterIndex(model, 'ParamEyeBallX');
+var eyeXValue = CubismAPI.getParameterValue(model, eyeXIndex);
+CubismAPI.setParameterValue(model, eyeXIndex, 0.5, 1.0);
 
 // Drawable data
-var drawCount = L2D.getDrawableCount(model);
-var vertCount = L2D.getDrawableVertexCount(model, 0);
-var opacity = L2D.getDrawableOpacity(model, 0);
-var isVisible = L2D.isDrawableVisible(model, 0);
+var drawCount = CubismAPI.getDrawableCount(model);
+var vertCount = CubismAPI.getDrawableVertexCount(model, 0);
+var opacity = CubismAPI.getDrawableOpacity(model, 0);
+var isVisible = CubismAPI.isDrawableVisible(model, 0);
+```
+
+### Backward Compatibility
+
+The old import paths still work via deprecated typedefs:
+
+```haxe
+// Old (deprecated, still works)
+import live2d.cubism.L2DComponent;       // → L2DFlixelComponent
+import live2d.cubism.L2DManager;          // → L2DFlixelManager
+import live2d.cubism.L2D;                 // → CubismAPI
+import live2d.cubism.L2DModel;            // → core.L2DModel
+
+// New (recommended)
+import live2d.cubism.flixel.L2DFlixelComponent;
+import live2d.cubism.flixel.L2DFlixelManager;
+import live2d.cubism.core.CubismAPI;
+import live2d.cubism.core.L2DModel;
 ```
 
 ## API Reference
 
-### L2DComponent (extends FlxBasic)
+### L2DFlixelComponent (extends FlxBasic)
 
 | Property/Method | Description |
 | --- | --- |
@@ -317,7 +338,7 @@ var isVisible = L2D.isDrawableVisible(model, 0);
 | `render()` | Redraw all visible drawables |
 | `getCanvasWidth()`, `getCanvasHeight()` | Model canvas dimensions |
 
-### L2DManager (static)
+### L2DFlixelManager (static)
 
 | Method | Description |
 | --- | --- |
@@ -329,20 +350,58 @@ var isVisible = L2D.isDrawableVisible(model, 0);
 | `clearTextureCache()` | Free cached textures |
 | `getContainer()` | Get global Sprite container |
 
+### L2DCore (platform-independent)
+
+| Property/Method | Description |
+| --- | --- |
+| `x`, `y` | Screen position |
+| `scale` | Render scale factor |
+| `alpha` | Global opacity multiplier |
+| `model` | Underlying `L2DModel` handle |
+| `modelWidth`, `modelHeight` | Computed model bounds |
+| `ownsTextures` | Whether this instance owns texture lifecycle (default: true) |
+| `startMotion(group, no, priority)` | Play a motion |
+| `startIdleMotion()` | Play random Idle motion |
+| `setExpression(id)` | Set expression by ID |
+| `setRandomExpression()` | Set random expression |
+| `hitTest(areaName, px, py)` | Hit test at screen coordinates |
+| `setDragging(screenX, screenY)` | Set drag/follow target |
+| `getContainer()` | Get root display handle |
+| `render()` | Redraw all visible drawables |
+| `update(elapsed)` | Update model with delta time |
+| `destroy()` | Release model and resources |
+| `getCanvasWidth()`, `getCanvasHeight()` | Model canvas dimensions |
+
+### CubismAPI (static facade)
+
+| Method | Description |
+| --- | --- |
+| `frameworkStartUp()` | Initialize the Cubism framework |
+| `frameworkCleanUp()` | Clean up the framework |
+| `getBridge()` | Get the current ICubismBridge implementation |
+| `setBridge(bridge)` | Set a custom ICubismBridge implementation |
+| `loadModel(dir, fileName)` | Load a model from directory |
+| `releaseModel(model)` | Release a model |
+| `update(model)` | Update model state |
+| ... | All 35 C API functions are available as static methods |
+
 ## Project Configuration
 
 In your `Project.xml`:
 
 ```xml
-<!-- Required libraries -->
+<!-- Required -->
+<haxelib name="hxcpp" />
+<haxelib name="live2d-haxe" />
+
+<!-- For Flixel/OpenFL backend -->
 <haxelib name="flixel" />
 <haxelib name="openfl" />
-<haxelib name="live2d-haxe" />
 ```
 
 Make sure your project targets Windows x64.
 
-## Build Configuration for the Native DLL
+## Native DLL Build Configuration (Windows)
 
 The CMakeLists.txt in `native/` supports the following options:
 
@@ -353,7 +412,7 @@ The CMakeLists.txt in `native/` supports the following options:
 Example with custom SDK path:
 
 ```bash
-cmake .. -DCUBISM_ROOT="D:/SDK/CubismSdkForNative-5-r.5"
+cmake .. -DCUBISM_ROOT="D:/SDK/CubismSdkForNative-5-r.5" -A x64
 ```
 
 ## Limitations

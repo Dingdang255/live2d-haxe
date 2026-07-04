@@ -47,12 +47,14 @@ Live2D Cubism SDK for Haxe —— 多后端渲染抽象层，基于 CalcOnly 架
 
 - Haxe 4.2.5+
 - hxcpp 4.2.1+
-- Lime 8.0.1+
-- OpenFL 9.2.1+
-- Flixel 4.11.0+
 - CMake 3.16+
 - Visual Studio 2019/2022（编译原生 C++）
 - **Cubism SDK for Native 5-r.5**（未随库附带，见下方说明）
+
+Flixel/OpenFL 后端（当前默认）额外需要：
+- Lime 8.0.1+
+- OpenFL 9.2.1+
+- Flixel 4.11.0+
 
 ## 第 1 步：下载 Cubism SDK
 
@@ -63,7 +65,7 @@ Cubism SDK **未包含**在本库中。你需要自行下载并同意 Live2D 许
 3. 解压到某目录，如 `C:/SDK/CubismSdkForNative-5-r.5/`
 4. 确保该目录包含 `Framework/src/` 和 `Core/` 子目录
 
-## 第 2 步：编译原生 DLL
+## 第 2 步：编译原生 DLL（Windows x64）
 
 ```bash
 cd native
@@ -92,7 +94,7 @@ haxelib dev live2d-haxe /path/to/live2d-haxe
 haxelib install live2d-haxe
 ```
 
-## 第 4 步：复制 DLL 到你的项目
+## 第 4 步：复制 DLL 到你的项目（Windows）
 
 DLL 必须在运行时可访问。将它们复制到项目的输出目录：
 
@@ -131,24 +133,24 @@ assets/
 <assets path="assets/live2d" rename="assets/live2d" />
 ```
 
-## 用法
+## 用法（Flixel/OpenFL 后端）
 
-### 基础：使用 L2DComponent 加载单个模型
+### 基础：使用 L2DFlixelComponent 加载单个模型
 
 ```haxe
-import live2d.cubism.L2DComponent;
+import live2d.cubism.flixel.L2DFlixelComponent;
 import openfl.display.Sprite;
 
 class MyState extends FlxState
 {
-    var l2d:L2DComponent;
+    var l2d:L2DFlixelComponent;
     
     override public function create()
     {
         super.create();
         
         // 加载 Live2D 模型
-        l2d = new L2DComponent('assets/live2d/Haru/', 'Haru.model3.json');
+        l2d = new L2DFlixelComponent('assets/live2d/Haru/', 'Haru.model3.json');
         
         // 位置和缩放
         l2d.x = FlxG.width / 2;
@@ -183,23 +185,24 @@ class MyState extends FlxState
 }
 ```
 
-### 使用 L2DManager 管理多个模型
+### 使用 L2DFlixelManager 管理多个模型
 
 ```haxe
-import live2d.cubism.L2DManager;
+import live2d.cubism.flixel.L2DFlixelComponent;
+import live2d.cubism.flixel.L2DFlixelManager;
 
 class MyState extends FlxState
 {
-    var bg:L2DComponent;
-    var character:L2DComponent;
+    var bg:L2DFlixelComponent;
+    var character:L2DFlixelComponent;
     
     override public function create()
     {
         super.create();
         
-        // L2DManager 负责框架初始化和纹理缓存
-        bg = L2DManager.create('assets/live2d/Background/', 'bg.model3.json');
-        character = L2DManager.create('assets/live2d/Haru/', 'Haru.model3.json');
+        // L2DFlixelManager 负责框架初始化和纹理缓存
+        bg = L2DFlixelManager.create('assets/live2d/Background/', 'bg.model3.json');
+        character = L2DFlixelManager.create('assets/live2d/Haru/', 'Haru.model3.json');
         
         // 添加 Sprite
         FlxG.stage.addChild(bg.getSprite());
@@ -210,13 +213,13 @@ class MyState extends FlxState
     {
         super.update(elapsed);
         
-        L2DManager.updateAll(elapsed);
-        L2DManager.renderAll();
+        L2DFlixelManager.updateAll(elapsed);
+        L2DFlixelManager.renderAll();
     }
     
     override public function destroy()
     {
-        L2DManager.destroyAll();
+        L2DFlixelManager.destroyAll();
         super.destroy();
     }
 }
@@ -230,7 +233,7 @@ class MyState extends FlxState
 var handle = l2d.startMotion('TapBody', 0, 3);
 
 // 检查动作是否完成
-if (l2d.model.notNull() && L2D.isMotionFinished(l2d.model, handle))
+if (l2d.model.notNull() && CubismAPI.isMotionFinished(l2d.model, handle))
 {
     trace('动作播放完毕！');
 }
@@ -267,38 +270,56 @@ if (FlxG.mouse.pressed)
 }
 ```
 
-### 底层 API（L2D 类）
+### 底层 API（CubismAPI）
 
-高级用法可直接使用 `L2D` 类访问全部 C API 函数：
+高级用法可直接使用 `CubismAPI` 类访问全部 C API 函数：
 
 ```haxe
-import live2d.cubism.L2D;
-import live2d.cubism.L2DModel;
+import live2d.cubism.core.CubismAPI;
+import live2d.cubism.core.L2DModel;
 
 // 框架生命周期
-L2D.frameworkStartUp();
+CubismAPI.frameworkStartUp();
 
 // 模型生命周期
-var model:L2DModel = L2D.loadModel('assets/live2d/Haru/', 'Haru.model3.json');
-L2D.update(model);
-L2D.releaseModel(model);
+var model:L2DModel = CubismAPI.loadModel('assets/live2d/Haru/', 'Haru.model3.json');
+CubismAPI.update(model);
+CubismAPI.releaseModel(model);
 
 // 参数
-var paramCount = L2D.getParameterCount(model);
-var eyeXIndex = L2D.findParameterIndex(model, 'ParamEyeBallX');
-var eyeXValue = L2D.getParameterValue(model, eyeXIndex);
-L2D.setParameterValue(model, eyeXIndex, 0.5, 1.0);
+var paramCount = CubismAPI.getParameterCount(model);
+var eyeXIndex = CubismAPI.findParameterIndex(model, 'ParamEyeBallX');
+var eyeXValue = CubismAPI.getParameterValue(model, eyeXIndex);
+CubismAPI.setParameterValue(model, eyeXIndex, 0.5, 1.0);
 
 // Drawable 数据
-var drawCount = L2D.getDrawableCount(model);
-var vertCount = L2D.getDrawableVertexCount(model, 0);
-var opacity = L2D.getDrawableOpacity(model, 0);
-var isVisible = L2D.isDrawableVisible(model, 0);
+var drawCount = CubismAPI.getDrawableCount(model);
+var vertCount = CubismAPI.getDrawableVertexCount(model, 0);
+var opacity = CubismAPI.getDrawableOpacity(model, 0);
+var isVisible = CubismAPI.isDrawableVisible(model, 0);
+```
+
+### 向后兼容
+
+旧的导入路径通过 deprecated typedef 仍然可用：
+
+```haxe
+// 旧写法（已弃用，但仍可工作）
+import live2d.cubism.L2DComponent;       // → L2DFlixelComponent
+import live2d.cubism.L2DManager;          // → L2DFlixelManager
+import live2d.cubism.L2D;                 // → CubismAPI
+import live2d.cubism.L2DModel;            // → core.L2DModel
+
+// 新写法（推荐）
+import live2d.cubism.flixel.L2DFlixelComponent;
+import live2d.cubism.flixel.L2DFlixelManager;
+import live2d.cubism.core.CubismAPI;
+import live2d.cubism.core.L2DModel;
 ```
 
 ## API 参考
 
-### L2DComponent（继承 FlxBasic）
+### L2DFlixelComponent（继承 FlxBasic）
 
 | 属性/方法 | 说明 |
 | --- | --- |
@@ -317,7 +338,7 @@ var isVisible = L2D.isDrawableVisible(model, 0);
 | `render()` | 重绘所有可见 drawable |
 | `getCanvasWidth()`, `getCanvasHeight()` | 模型画布尺寸 |
 
-### L2DManager（静态类）
+### L2DFlixelManager（静态类）
 
 | 方法 | 说明 |
 | --- | --- |
@@ -329,20 +350,58 @@ var isVisible = L2D.isDrawableVisible(model, 0);
 | `clearTextureCache()` | 释放缓存的纹理 |
 | `getContainer()` | 获取全局 Sprite 容器 |
 
+### L2DCore（平台无关）
+
+| 属性/方法 | 说明 |
+| --- | --- |
+| `x`, `y` | 屏幕坐标 |
+| `scale` | 渲染缩放因子 |
+| `alpha` | 全局透明度乘数 |
+| `model` | 底层 `L2DModel` 句柄 |
+| `modelWidth`, `modelHeight` | 计算得到的模型边界 |
+| `ownsTextures` | 是否持有纹理生命周期（默认 true） |
+| `startMotion(group, no, priority)` | 播放动作 |
+| `startIdleMotion()` | 播放随机空闲动作 |
+| `setExpression(id)` | 按 ID 设置表情 |
+| `setRandomExpression()` | 设置随机表情 |
+| `hitTest(areaName, px, py)` | 在屏幕坐标处进行命中测试 |
+| `setDragging(screenX, screenY)` | 设置拖拽/跟随目标 |
+| `getContainer()` | 获取根显示对象句柄 |
+| `render()` | 重绘所有可见 drawable |
+| `update(elapsed)` | 使用 deltaTime 更新模型 |
+| `destroy()` | 释放模型和资源 |
+| `getCanvasWidth()`, `getCanvasHeight()` | 模型画布尺寸 |
+
+### CubismAPI（静态门面）
+
+| 方法 | 说明 |
+| --- | --- |
+| `frameworkStartUp()` | 初始化 Cubism 框架 |
+| `frameworkCleanUp()` | 清理框架 |
+| `getBridge()` | 获取当前 ICubismBridge 实现 |
+| `setBridge(bridge)` | 设置自定义 ICubismBridge 实现 |
+| `loadModel(dir, fileName)` | 从目录加载模型 |
+| `releaseModel(model)` | 释放模型 |
+| `update(model)` | 更新模型状态 |
+| ... | 全部 35 个 C API 函数均可作为静态方法调用 |
+
 ## 项目配置
 
 在你的 `Project.xml` 中：
 
 ```xml
-<!-- 必需的库 -->
+<!-- 必需 -->
+<haxelib name="hxcpp" />
+<haxelib name="live2d-haxe" />
+
+<!-- Flixel/OpenFL 后端 -->
 <haxelib name="flixel" />
 <haxelib name="openfl" />
-<haxelib name="live2d-haxe" />
 ```
 
-请确保你的项目目标平台为 windows x64。
+请确保你的项目目标平台为 Windows x64。
 
-## 原生 DLL 构建配置
+## 原生 DLL 构建配置（Windows）
 
 `native/` 目录中的 CMakeLists.txt 支持以下选项：
 
@@ -353,7 +412,7 @@ var isVisible = L2D.isDrawableVisible(model, 0);
 自定义 SDK 路径示例：
 
 ```bash
-cmake .. -DCUBISM_ROOT="D:/SDK/CubismSdkForNative-5-r.5"
+cmake .. -DCUBISM_ROOT="D:/SDK/CubismSdkForNative-5-r.5" -A x64
 ```
 
 ## 已知限制
