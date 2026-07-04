@@ -65,7 +65,26 @@ The Cubism SDK is **NOT** included in this library. You must download it separat
 3. Extract to a directory, e.g., `C:/SDK/CubismSdkForNative-5-r.5/`
 4. Make sure the directory contains `Framework/src/` and `Core/` subdirectories
 
-## Step 2: Compile the Native DLL (Windows x64)
+## Step 2: Install the Haxelib
+
+Option A — Download the release zip:
+```bash
+haxelib install live2d-haxe
+```
+
+Option B — Install from GitHub repository:
+```bash
+haxelib git live2d-haxe https://github.com/Dingdang255/live2d-haxe.git
+```
+
+Option C — Local development (only for contributing to this library):
+```bash
+haxelib dev live2d-haxe /path/to/live2d-haxe
+```
+
+## Step 3: Compile the Native DLL (Windows x64)
+
+Navigate to the library's native directory (find it via `haxelib path live2d-haxe`) and build:
 
 ```bash
 cd native
@@ -83,23 +102,6 @@ After building, you will find in `lib/win/`:
 
 - `live2d_capi.dll` - The C API bridge
 - `Live2DCubismCore.dll` - The Cubism Core (auto-copied from SDK)
-
-## Step 3: Install the Haxelib
-
-Option A — Download the release zip:
-```bash
-haxelib install live2d-haxe
-```
-
-Option B — Install from GitHub repository:
-```bash
-haxelib git live2d-haxe https://github.com/Dingdang255/live2d-haxe.git
-```
-
-Option C — Local development (only for contributing to this library):
-```bash
-haxelib dev live2d-haxe /path/to/live2d-haxe
-```
 
 ## Step 4: Copy DLLs to Your Project (Windows)
 

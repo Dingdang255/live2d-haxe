@@ -65,7 +65,26 @@ Cubism SDK **未包含**在本库中。你需要自行下载并同意 Live2D 许
 3. 解压到某目录，如 `C:/SDK/CubismSdkForNative-5-r.5/`
 4. 确保该目录包含 `Framework/src/` 和 `Core/` 子目录
 
-## 第 2 步：编译原生 DLL（Windows x64）
+## 第 2 步：安装 Haxelib
+
+方式 A — 下载发布包安装：
+```bash
+haxelib install live2d-haxe
+```
+
+方式 B — 从 GitHub 仓库安装：
+```bash
+haxelib git live2d-haxe https://github.com/Dingdang255/live2d-haxe.git
+```
+
+方式 C — 本地开发模式（仅限对本库进行贡献开发时使用）：
+```bash
+haxelib dev live2d-haxe /path/to/live2d-haxe
+```
+
+## 第 3 步：编译原生 DLL（Windows x64）
+
+进入库的 native 目录（可通过 `haxelib path live2d-haxe` 查找路径）并构建：
 
 ```bash
 cd native
@@ -83,23 +102,6 @@ cmake --build . --config Release
 
 - `live2d_capi.dll` — C API 桥接层
 - `Live2DCubismCore.dll` — Cubism Core（从 SDK 自动复制）
-
-## 第 3 步：安装 Haxelib
-
-方式 A — 下载发布包安装：
-```bash
-haxelib install live2d-haxe
-```
-
-方式 B — 从 GitHub 仓库安装：
-```bash
-haxelib git live2d-haxe https://github.com/Dingdang255/live2d-haxe.git
-```
-
-方式 C — 本地开发模式（仅限对本库进行贡献开发时使用）：
-```bash
-haxelib dev live2d-haxe /path/to/live2d-haxe
-```
 
 ## 第 4 步：复制 DLL 到你的项目（Windows）
 
