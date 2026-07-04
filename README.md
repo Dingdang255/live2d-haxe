@@ -86,12 +86,19 @@ After building, you will find in `lib/win/`:
 
 ## Step 3: Install the Haxelib
 
+Option A — Download the release zip:
 ```bash
-# Development mode (recommended during development)
-haxelib dev live2d-haxe /path/to/live2d-haxe
-
-# Or install from zip
 haxelib install live2d-haxe
+```
+
+Option B — Install from GitHub repository:
+```bash
+haxelib git live2d-haxe https://github.com/Dingdang255/live2d-haxe.git
+```
+
+Option C — Local development (only for contributing to this library):
+```bash
+haxelib dev live2d-haxe /path/to/live2d-haxe
 ```
 
 ## Step 4: Copy DLLs to Your Project (Windows)

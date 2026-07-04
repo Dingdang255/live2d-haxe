@@ -19,6 +19,13 @@ test/*.dll
 # Test project live2d assets (must be copied manually)
 test/assets/live2d/*
 
+# Archives
+*.zip
+
+# Automation Scripts
+*.bat
+*.sh
+
 # Haxe
 *.n
 haxelib.json.bak

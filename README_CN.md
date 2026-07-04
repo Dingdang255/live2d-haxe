@@ -86,12 +86,19 @@ cmake --build . --config Release
 
 ## 第 3 步：安装 Haxelib
 
+方式 A — 下载发布包安装：
 ```bash
-# 开发模式（开发期间推荐）
-haxelib dev live2d-haxe /path/to/live2d-haxe
-
-# 或从 zip 安装
 haxelib install live2d-haxe
+```
+
+方式 B — 从 GitHub 仓库安装：
+```bash
+haxelib git live2d-haxe https://github.com/Dingdang255/live2d-haxe.git
+```
+
+方式 C — 本地开发模式（仅限对本库进行贡献开发时使用）：
+```bash
+haxelib dev live2d-haxe /path/to/live2d-haxe
 ```
 
 ## 第 4 步：复制 DLL 到你的项目（Windows）
