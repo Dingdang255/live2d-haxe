@@ -142,6 +142,17 @@ class CubismAPI
     public static function getDrawableMasks(model:L2DModel, i:Int, out:Bytes):Void
         getBridge().getDrawableMasks(model, i, out);
 
+    public static function getDrawableInvertedMask(model:L2DModel, i:Int):Bool
+        return getBridge().getDrawableInvertedMask(model, i);
+
+    public static function isDrawableVertexPositionsDidChange(model:L2DModel, i:Int):Bool
+        return getBridge().isDrawableVertexPositionsDidChange(model, i);
+
+    // ===== Batch =====
+
+    public static function getDrawableBatchMetadata(model:L2DModel, count:Int, out:Bytes):Void
+        getBridge().getDrawableBatchMetadata(model, count, out);
+
     // ===== Texture =====
 
     public static function getTextureCount(model:L2DModel):Int

@@ -38,7 +38,8 @@ live2d.cubism
 │   ├── L2DTextureHandle.hx  # Opaque texture handle
 │   ├── L2DDisplayHandle.hx  # Opaque display handle
 │   └── openfl/
-│       └── OpenFLRenderer.hx  # OpenFL implementation (#if openfl)
+│       ├── OpenFLRenderer.hx      # OpenFL implementation (#if openfl)
+│       └── CubismRendererShader.hx  # Unified GPU shader (#if openfl)
 ├── flixel/                  # Flixel framework integration
 │   ├── L2DFlixelComponent.hx  # FlxBasic wrapper (#if flixel)
 │   └── L2DFlixelManager.hx    # Static manager with cache (#if flixel)
@@ -68,29 +69,38 @@ Abstracts the rendering backend. L2DCore computes "what to draw" and calls IL2DR
 - **Texture management**: `loadTexture`, `destroyTexture`
 - **Display object lifecycle**: `createContainer`, `createDisplayObject`, `resetDisplayObject`
 - **Display properties**: `setVisible`, `setAlpha`, `setBlendMode`, `setColorTransform`, `resetColorTransform`, `setMask`, `clearMask`
+- **Shader rendering**: `supportsShaderMask`, `renderMaskToBitmapData`, `drawShaderTexturedTriangles`
 - **Drawing**: `drawTexturedTriangles`, `drawSolidTriangles`
-- **Display list**: `setChildIndex`, `getContainer`
+- **Display list**: `setChildIndex`, `getObjectId`, `getContainer`
 
 **Current implementations**:
-- `OpenFLRenderer` — Uses `Sprite.graphics.drawTriangles()` (#if openfl)
+- `OpenFLRenderer` — Uses `Sprite.graphics.drawTriangles()` with `CubismRendererShader` for GPU-accelerated mask/color/opacity (#if openfl)
+
+**Two rendering paths**:
+1. **Shader path** (default when `supportsShaderMask()` returns true): Uses `beginShaderFill(CubismRendererShader)` + `drawTriangles`. Mask, Multiply/Screen color, and opacity handled by fragment shader uniforms. All drawables are batchable regardless of color/opacity.
+2. **Fallback path**: Uses `beginBitmapFill` + `drawTriangles` + `ColorTransform` + `Sprite.mask`. Drawables with non-default color or partial opacity cannot be batched.
 
 ## Data Flow
 
 ```
 C API (live2d_capi.dll)
-    ↓ ICubismBridge
+    ↓ ICubismBridge (1 batch metadata call + vertex data calls)
 L2DCore
-    ├── Reads drawable data via bridge
+    ├── Reads all drawable metadata via batch API (1 FFI call)
+    ├── Caches UVs/indices at construction (0 FFI at runtime)
+    ├── Caches vertex positions with dirty markers (only changed drawables)
     ├── Transforms vertices: screen-space coords, UV flipping
-    ├── Builds batches (groups consecutive drawables by state)
-    ├── Pre-computes mask groups (shared mask shapes)
+    ├── Builds batches (groups drawables by texture+blend+mask+color+opacity)
+    ├── Pre-computes mask groups (rendered to offscreen BitmapData, RGB channel packing)
     └── Calls IL2DRenderer methods
         ↓
     OpenFLRenderer (or future: HeapsRenderer, etc.)
-        ├── Creates/manages display objects
-        ├── Draws triangles
-        ├── Applies blend modes, color transforms, masks
-        └── Manages display list ordering
+        ├── Shader path: beginShaderFill + drawTriangles + shader uniforms
+        │   ├── Mask: u_maskTex sampler + u_channelFlag
+        │   ├── Color: u_mulColor / u_scrColor (blend-mode conditional)
+        │   └── Opacity: u_opacity (RGBA scaling)
+        ├── Fallback: beginBitmapFill + drawTriangles + ColorTransform + Sprite.mask
+        └── Manages display list ordering with Sprite pooling
 ```
 
 ## Key Design Decisions
@@ -99,4 +109,6 @@ L2DCore
 2. **Opaque handles** (`L2DTextureHandle`, `L2DDisplayHandle` as `abstract Dynamic`) — type-safe at compile time, zero overhead at runtime
 3. **Texture loading injection** — OpenFLRenderer accepts `textureLoader`/`textureDestroyer` functions to support both plain OpenFL and Flixel scenarios without subclassing
 4. **All vertex transforms in L2DCore** — renderer receives pre-transformed screen-space data, no coordinate system knowledge needed
-5. **Backward compatibility** — deprecated typedefs allow existing `L2D`, `L2DComponent`, `L2DManager` imports to keep working
+5. **GPU shader-first with automatic fallback** — `CubismRendererShader` handles mask/color/opacity in fragment shader for maximum batching; falls back to Sprite.mask when shader unsupported or model has >3 mask groups
+6. **Batch FFI metadata** — Single C API call returns all drawable metadata (48 bytes/drawable), reducing per-frame FFI calls from ~4000 to ~10
+7. **Backward compatibility** — deprecated typedefs allow existing `L2D`, `L2DComponent`, `L2DManager` imports to keep working

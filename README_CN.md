@@ -428,9 +428,9 @@ cmake .. -DCUBISM_ROOT="D:/SDK/CubismSdkForNative-5-r.5" -A x64
 
 - **仅 Windows x64**（当前桥接层）— `HxcppWindowsBridge` 使用 Windows 特有的 `GetProcAddress`/`LoadLibraryA`。Linux/macOS 支持需要使用 `dlopen`/`dlsym` 实现新的桥接层。
 - **CalcOnly 渲染** — C++ 端不做 GPU 渲染；所有绘制通过渲染后端完成（如 OpenFL 的 `drawTriangles`，GPU 加速）。
-- **正片叠底/滤色混合** — 通过 ColorTransform 实现（OpenFL 后端），非 GPU 着色器；非默认颜色的 drawable 无法合批。
-- **批量渲染** — renderOrder 中连续且状态相同（纹理、混合模式、遮罩组、默认颜色）的 drawable 合并为一次 draw call。典型模型 draw call 从 ~130 降至 ~16-24。
-- **遮罩性能** — 共享同一遮罩组的 drawable 共用一个遮罩显示对象（根据后端使用 stencil 或 alpha 方式）。
+- **GPU 着色器路径**（默认）— 遮罩、正片叠底/滤色颜色和透明度由 `CubismRendererShader` 片段着色器处理。所有 drawable 均可合批，不受颜色/透明度限制。批键 = (texture, blendMode, maskGroup, mulColor, scrColor, opacity)。着色器不可用或模型超过 3 个遮罩组时自动回退至 `Sprite.mask`。
+- **批量渲染** — 状态相同的 drawable 合并为一次 draw call。典型模型：~18 个批次，来自 ~130 个独立 draw call。Sprite 池化（32 batch + 16 mask）避免每帧分配。
+- **遮罩组** — GPU 着色器路径最多支持 3 个遮罩组（RGB 通道打包）。超过 3 个组的模型回退至 `Sprite.mask`。
 
 ## 许可证
 

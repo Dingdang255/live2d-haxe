@@ -3,10 +3,10 @@
   "url": "https://github.com/Dingdang255/live2d-haxe",
   "license": "MIT",
   "tags": ["live2d", "cubism", "openfl", "flixel", "cpp", "native", "multi-backend"],
-  "description": "Live2D Cubism SDK for Haxe - multi-backend rendering abstraction with CalcOnly architecture",
-  "version": "0.3.0",
+  "description": "Live2D Cubism SDK for Haxe - GPU shader rendering with multi-backend abstraction",
+  "version": "0.4.0",
   "classPath": "src",
-  "releasenote": "Multi-platform abstraction layer: ICubismBridge, IL2DRenderer, L2DCore, OpenFLRenderer, Flixel integration",
+  "releasenote": "GPU Shader pipeline: CubismRendererShader, batch FFI metadata, vertex caching, full batch merging",
   "contributors": ["Dingdang255"],
   "dependencies": {
     "hxcpp": "4.2.1"

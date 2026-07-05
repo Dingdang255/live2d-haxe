@@ -59,6 +59,11 @@ interface ICubismBridge
     // Mask
     function getDrawableMaskCount(model:L2DModel, i:Int):Int;
     function getDrawableMasks(model:L2DModel, i:Int, out:Bytes):Void;
+    function getDrawableInvertedMask(model:L2DModel, i:Int):Bool;
+    function isDrawableVertexPositionsDidChange(model:L2DModel, i:Int):Bool;
+
+    // Batch
+    function getDrawableBatchMetadata(model:L2DModel, count:Int, out:Bytes):Void;
 
     // Texture
     function getTextureCount(model:L2DModel):Int;

@@ -55,6 +55,28 @@ interface IL2DRenderer
     /** Remove mask from a display object */
     function clearMask(obj:L2DDisplayHandle):Void;
 
+    /** Whether this renderer supports GPU shader-based rendering (mask + color) */
+    function supportsShaderMask():Bool;
+
+    /** Render mask shapes to an offscreen texture, packing up to 3 groups into RGB channels */
+    function renderMaskToBitmapData(
+        maskShapes:Array<{groupIndex:Int, channelFlag:Array<Float>,
+                          vertices:Array<Array<Float>>, indices:Array<Array<Int>>}>,
+        width:Int, height:Int, offsetX:Float, offsetY:Float
+    ):L2DTextureHandle;
+
+    /** Draw textured triangles with unified shader (mask + color + opacity) */
+    function drawShaderTexturedTriangles(obj:L2DDisplayHandle,
+        texture:L2DTextureHandle,
+        vertices:Array<Float>, uvs:Array<Float>, indices:Array<Int>,
+        ?maskTexture:L2DTextureHandle,
+        ?channelFlag:Array<Float>,
+        ?maskOffset:Array<Float>, ?maskScale:Array<Float>,
+        ?isInverted:Bool,
+        ?mulColor:Array<Float>,
+        ?scrColor:Array<Float>,
+        ?opacity:Float):Void;
+
     // ===== Drawing =====
 
     /** Draw textured triangles onto a display object */
@@ -70,6 +92,9 @@ interface IL2DRenderer
 
     /** Set the z-order index of a child display object within the container */
     function setChildIndex(child:L2DDisplayHandle, index:Int):Void;
+
+    /** Get a unique integer ID for a display object (for dirty tracking) */
+    function getObjectId(obj:L2DDisplayHandle):Int;
 
     /** Get the root container display object */
     function getContainer():L2DDisplayHandle;

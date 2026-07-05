@@ -107,11 +107,7 @@ class L2DDemoState extends FlxState
 
         if (l2d == null || l2d.model.isNull()) return;
 
-        // Update and render
-        L2DManager.updateAll(elapsed);
-        L2DManager.renderAll();
-
-        // Eye tracking (non-Ctrl mouse hold)
+        // Eye tracking - set dragging BEFORE update so current frame responds
         if (FlxG.mouse.pressed && !FlxG.keys.pressed.CONTROL)
         {
             l2d.setDragging(FlxG.mouse.x, FlxG.mouse.y);
@@ -120,6 +116,10 @@ class L2DDemoState extends FlxState
         {
             l2d.setDragging(l2d.x, l2d.y);
         }
+
+        // Update and render
+        L2DManager.updateAll(elapsed);
+        L2DManager.renderAll();
 
         // Hit test on click
         if (FlxG.mouse.justPressed && !FlxG.keys.pressed.CONTROL)

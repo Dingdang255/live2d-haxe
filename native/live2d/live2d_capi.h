@@ -74,6 +74,12 @@ L2D_API int   l2d_get_drawable_blend_mode(L2D_Model m, int drawableIndex);
 // ===== Mask =====
 L2D_API int  l2d_get_drawable_mask_count(L2D_Model m, int drawableIndex);
 L2D_API void l2d_get_drawable_masks(L2D_Model m, int drawableIndex, int* outBuf);
+L2D_API bool l2d_get_drawable_inverted_mask(L2D_Model m, int drawableIndex);
+L2D_API bool l2d_get_drawable_dynamic_flag_vertex_positions_did_change(L2D_Model m, int drawableIndex);
+
+// ===== Batch Metadata (one call returns all drawable metadata) =====
+// Layout per drawable: int32 visible, int32 renderOrder, float opacity, int32 textureIndex, int32 blendMode, float mulR, float mulG, float mulB, float scrR, float scrG, float scrB, int32 vertexDidChange = 48 bytes
+L2D_API void l2d_get_drawable_batch_metadata(L2D_Model m, int count, char* outBuf);
 
 // ===== Texture Path =====
 L2D_API int  l2d_get_texture_count(L2D_Model m);

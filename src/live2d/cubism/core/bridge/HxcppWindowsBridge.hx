@@ -50,6 +50,9 @@ struct L2DFunctions {
     void (*set_parameter_value)(void*, int, float, float);
     int (*get_drawable_mask_count)(void*, int);
     void (*get_drawable_masks)(void*, int, int*);
+    bool (*get_drawable_inverted_mask)(void*, int);
+    bool (*get_drawable_dynamic_flag_vertex_positions_did_change)(void*, int);
+    void (*get_drawable_batch_metadata)(void*, int, char*);
     bool loaded;
 };
 static L2DFunctions l2dFn = {0};
@@ -96,6 +99,9 @@ static void l2d_ensure_loaded() {
     L2D_LOAD(set_parameter_value);
     L2D_LOAD(get_drawable_mask_count);
     L2D_LOAD(get_drawable_masks);
+    L2D_LOAD(get_drawable_inverted_mask);
+    L2D_LOAD(get_drawable_dynamic_flag_vertex_positions_did_change);
+    L2D_LOAD(get_drawable_batch_metadata);
     #undef L2D_LOAD
     l2dFn.loaded = true;
 }
@@ -284,6 +290,21 @@ class HxcppWindowsBridge implements ICubismBridge
     public function getDrawableMasks(model:L2DModel, i:Int, out:Bytes):Void
     {
         untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.get_drawable_masks) l2dFn.get_drawable_masks(M((cpp::Int64){0}), {1}, (int*)({2}->b.mPtr->GetBase()))', m(model), i, out);
+    }
+
+    public function getDrawableInvertedMask(model:L2DModel, i:Int):Bool
+    {
+        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.get_drawable_inverted_mask ? l2dFn.get_drawable_inverted_mask(M((cpp::Int64){0}), {1}) : false)', m(model), i);
+    }
+
+    public function isDrawableVertexPositionsDidChange(model:L2DModel, i:Int):Bool
+    {
+        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.get_drawable_dynamic_flag_vertex_positions_did_change ? l2dFn.get_drawable_dynamic_flag_vertex_positions_did_change(M((cpp::Int64){0}), {1}) : false)', m(model), i);
+    }
+
+    public function getDrawableBatchMetadata(model:L2DModel, count:Int, out:Bytes):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.get_drawable_batch_metadata) l2dFn.get_drawable_batch_metadata(M((cpp::Int64){0}), {1}, (char*)({2}->b.mPtr->GetBase()))', m(model), count, out);
     }
 
     // ===== Texture =====

@@ -428,9 +428,9 @@ cmake .. -DCUBISM_ROOT="D:/SDK/CubismSdkForNative-5-r.5" -A x64
 
 - **Windows x64 only** (current bridge) - `HxcppWindowsBridge` uses Windows-specific `GetProcAddress`/`LoadLibraryA`. Linux/macOS support requires a new bridge implementation using `dlopen`/`dlsym`.
 - **CalcOnly rendering** - C++ side does no GPU rendering; all drawing is via the rendering backend (e.g., OpenFL's `drawTriangles` with GPU acceleration).
-- **Multiply/Screen blending** - Applied via `ColorTransform` (OpenFL backend), not GPU shaders; drawables with non-default colors cannot be batched.
-- **Batched rendering** - Consecutive drawables sharing the same state (texture, blendMode, mask group, default color) are merged into one draw call. Draw calls reduced from ~130 to ~16-24 for typical models.
-- **Mask performance** - Masked drawables sharing the same mask group use a single shared mask display object (stencil/alpha-based depending on backend).
+- **GPU Shader path** (default) — Mask, Multiply/Screen color, and opacity handled by `CubismRendererShader` fragment shader. All drawables are batchable regardless of color/opacity. Batch key = (texture, blendMode, maskGroup, mulColor, scrColor, opacity). Automatic fallback to `Sprite.mask` when shader unsupported or model has >3 mask groups.
+- **Batched rendering** — Drawables sharing the same state are merged into one draw call. Typical models: ~18 batches from ~130 individual draw calls. Sprite pooling (32 batch + 16 mask) avoids per-frame allocation.
+- **Mask groups** — Up to 3 mask groups supported in GPU shader path (RGB channel packing). Models with >3 groups fall back to `Sprite.mask`.
 
 ## License
 

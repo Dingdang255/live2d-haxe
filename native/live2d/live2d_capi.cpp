@@ -321,6 +321,56 @@ L2D_API void l2d_get_drawable_masks(L2D_Model m, int drawableIndex, int* outBuf)
     memcpy(outBuf, masks[drawableIndex], count * sizeof(int));
 }
 
+L2D_API bool l2d_get_drawable_inverted_mask(L2D_Model m, int drawableIndex)
+{
+    if (m == NULL) return false;
+    CubismModel* model = GetModel(m)->GetModel();
+    return model->GetDrawableInvertedMask(drawableIndex);
+}
+
+L2D_API bool l2d_get_drawable_dynamic_flag_vertex_positions_did_change(L2D_Model m, int drawableIndex)
+{
+    if (m == NULL) return false;
+    CubismModel* model = GetModel(m)->GetModel();
+    return model->GetDrawableDynamicFlagVertexPositionsDidChange(drawableIndex);
+}
+
+// ===== Batch Metadata =====
+
+L2D_API void l2d_get_drawable_batch_metadata(L2D_Model m, int count, char* outBuf)
+{
+    if (m == NULL || outBuf == NULL || count <= 0) return;
+    CubismModel* model = GetModel(m)->GetModel();
+    if (model == NULL) return;
+
+    const csmInt32* renderOrders = model->GetRenderOrders();
+
+    // Per drawable: visible(i32) + renderOrder(i32) + opacity(f32) + textureIndex(i32) + blendMode(i32) + mulRGB(3xf32) + scrRGB(3xf32) + vertexDidChange(i32) = 48 bytes
+    for (int i = 0; i < count; i++)
+    {
+        int offset = i * 48;
+        int32_t visible = model->GetDrawableDynamicFlagIsVisible(i) ? 1 : 0;
+        memcpy(outBuf + offset, &visible, 4);
+        memcpy(outBuf + offset + 4, &renderOrders[i], 4);
+        float opacity = model->GetDrawableOpacity(i);
+        memcpy(outBuf + offset + 8, &opacity, 4);
+        int32_t texIdx = model->GetDrawableTextureIndex(i);
+        memcpy(outBuf + offset + 12, &texIdx, 4);
+        int32_t blendMode = model->GetDrawableBlendModeType(i).GetColorBlendType();
+        memcpy(outBuf + offset + 16, &blendMode, 4);
+        auto mulColor = model->GetDrawableMultiplyColor(i);
+        memcpy(outBuf + offset + 20, &mulColor.X, 4);
+        memcpy(outBuf + offset + 24, &mulColor.Y, 4);
+        memcpy(outBuf + offset + 28, &mulColor.Z, 4);
+        auto scrColor = model->GetDrawableScreenColor(i);
+        memcpy(outBuf + offset + 32, &scrColor.X, 4);
+        memcpy(outBuf + offset + 36, &scrColor.Y, 4);
+        memcpy(outBuf + offset + 40, &scrColor.Z, 4);
+        int32_t vertChanged = model->GetDrawableDynamicFlagVertexPositionsDidChange(i) ? 1 : 0;
+        memcpy(outBuf + offset + 44, &vertChanged, 4);
+    }
+}
+
 // ===== Texture Path =====
 
 L2D_API int l2d_get_texture_count(L2D_Model m)

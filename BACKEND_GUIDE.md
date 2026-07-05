@@ -34,7 +34,7 @@ class HxcppLinuxBridge implements ICubismBridge
         // ...
     }
 
-    // Implement all 35 methods...
+    // Implement all methods...
 }
 
 #end
@@ -51,10 +51,11 @@ _bridge = new HxcppLinuxBridge();
 ### Key considerations for bridge implementations:
 
 - **DLL loading**: Use the platform's dynamic library API (`dlopen` on Linux/macOS, `LoadLibrary` on Windows)
-- **Function pointers**: Cache all 35 function pointers at load time for performance
+- **Function pointers**: Cache all function pointers at load time for performance
 - **String conversion**: Haxe `String.utf8_str()` provides UTF-8 C strings on hxcpp
 - **Bytes output**: Use `out->b.mPtr->GetBase()` to get raw pointer from `haxe.io.Bytes`
 - **Model handles**: `L2DModel` is `abstract L2DModel(cpp.Int64)`, cast via `cast(value, cpp.Int64)`
+- **Batch metadata**: `getDrawableBatchMetadata()` returns a `Bytes` buffer with 48 bytes per drawable
 
 ## Step 2: Implement IL2DRenderer
 
@@ -100,7 +101,7 @@ class YourRenderer implements IL2DRenderer
 - Called once per L2DCore instance
 
 **`destroyContainer():Void`**
-- Remove the container and all children from the scene
+- Remove the container and all its children from the scene
 
 **`createDisplayObject():L2DDisplayHandle`**
 - Create a reusable display object (equivalent to OpenFL Sprite)
@@ -127,26 +128,61 @@ class YourRenderer implements IL2DRenderer
 **`setColorTransform(obj, mulR, mulG, mulB, mulA, addR, addG, addB, addA)`**
 - Multipliers are in [0,1] range, offsets are in [0,255] range
 - Final color = `original * multiplier + offset / 255`
-- If your framework uses shaders, pass these as uniforms
+- Only used in fallback path (non-shader)
 - For Live2D: `multiplier = multiplyColor * (1 - screenColor)`, `offset = screenColor * 255`
 
 **`setMask(obj, mask)` / `clearMask(obj)`**
 - Apply/remove a mask display object
-- The mask has been drawn with `drawSolidTriangles` (white-filled triangles)
+- Only used in fallback path (non-shader)
 - If your framework supports alpha-based masking, use the mask as-is
-- If your framework uses stencil buffers, you'll need to render the mask with stencil write enabled and the target with stencil test enabled
+- If your framework uses stencil buffers, render the mask with stencil write and target with stencil test
 
-#### Drawing
+#### Shader Rendering (GPU path)
+
+**`supportsShaderMask():Bool`**
+- Return `true` if your renderer supports GPU shader-based mask/color/opacity
+- When `true`, L2DCore uses the shader path for maximum batch merging
+- When `false`, falls back to Sprite.mask + ColorTransform path
+
+**`renderMaskToBitmapData(maskShapes, width, height, offsetX, offsetY):L2DTextureHandle`**
+- Render mask shapes to an off-screen texture for GPU shader sampling
+- `maskShapes` is an array of `{groupIndex, channelFlag, vertices, indices}`
+  - `groupIndex` (0-2): which mask group
+  - `channelFlag` (Array\<Float\>, 4 elements): RGB channel selector — `[1,0,0,0]` for red, `[0,1,0,0]` for green, `[0,0,1,0]` for blue
+  - `vertices`: Array of vertex arrays (each drawable's vertex positions)
+  - `indices`: Array of index arrays (each drawable's triangle indices)
+- Up to 3 mask groups packed into RGB channels of a single texture
+- Return an opaque texture handle for the rendered mask texture
+- `width`/`height` are typically 1/4 of the canvas size
+- `offsetX`/`offsetY` translate vertex positions into the mask texture's coordinate space
+
+**`drawShaderTexturedTriangles(obj, texture, vertices, uvs, indices, ?maskTexture, ?channelFlag, ?maskOffset, ?maskScale, ?isInverted, ?mulColor, ?scrColor, ?opacity):Void`**
+- Core rendering call for the GPU shader path
+- All data is pre-transformed (screen-space coords, UV flipped)
+- Optional parameters for shader features:
+  - `maskTexture`: Off-screen mask texture from `renderMaskToBitmapData`
+  - `channelFlag`: RGB channel selector `[1,0,0,0]`, `[0,1,0,0]`, or `[0,0,1,0]`
+  - `maskOffset`/`maskScale`: Transform mask UVs from screen-space to mask texture coords
+  - `isInverted`: Whether mask is inverted
+  - `mulColor`: Multiply color `[R, G, B]` (applied for Multiply blend mode)
+  - `scrColor`: Screen color `[R, G, B]` (applied for Screen blend mode)
+  - `opacity`: Per-drawable opacity (0..1), applied as RGBA scaling
+
+**`getObjectId(obj:L2DDisplayHandle):Int`**
+- Return a unique integer ID for a display object
+- Used for dirty tracking (skip redundant resets)
+
+#### Drawing (fallback path)
 
 **`drawTexturedTriangles(obj, texture, vertices, uvs, indices)`**
+- Fallback path rendering call (no shader)
 - All data is pre-transformed:
   - `vertices`: screen-space x,y pairs (already scaled, translated, Y-flipped)
   - `uvs`: texture coordinates (V already flipped: `1.0 - originalV`)
   - `indices`: triangle indices (already adjusted for batch merging)
-- This is the core rendering call
 
 **`drawSolidTriangles(obj, vertices, indices)`**
-- Draw white-filled triangles (used for mask shapes)
+- Draw white-filled triangles (used for mask shapes in fallback path)
 - No texture or UV data needed
 
 #### Display List
@@ -196,16 +232,17 @@ class L2DYourFrameworkObject extends YourFrameworkBaseClass
 
 The `OpenFLRenderer` in `live2d.cubism.backend.openfl` is the reference implementation. Key aspects:
 
+- **GPU Shader path**: `CubismRendererShader` (extends `GraphicsShader`) handles mask sampling, Multiply/Screen color blending, and per-drawable opacity via fragment shader uniforms. Uses `@:glFragmentBody` for custom GLSL injection.
 - **Texture injection**: Constructor accepts `textureLoader`, `textureDestroyer`, and `textureToBitmapData` functions, allowing the same renderer to work with both plain `BitmapData` and Flixel's `FlxGraphic`
 - **Array to Vector conversion**: `Vector.ofArray()` converts Haxe `Array<Float>` to OpenFL `Vector<Float>` for `drawTriangles()`
 - **Blend mode mapping**: Simple switch statement mapping Live2D values to `openfl.display.BlendMode` enum
-- **ColorTransform**: Direct mapping to `openfl.geom.ColorTransform` constructor
-- **Masking**: Uses OpenFL's `sprite.mask` property (alpha-based masking)
+- **Automatic fallback**: `supportsShaderMask()` returns `true`; users can set `useShaderMask = false` to force fallback to `Sprite.mask` + `ColorTransform`
 
 ## Performance Notes
 
 - L2DCore pre-allocates display object pools (32 batch + 16 mask objects)
-- `resetDisplayObject` is called on all pool objects every frame — keep it fast
-- `drawTexturedTriangles` is called ~16-24 times per frame (after batching)
-- Vertex data per call: typically 50-500 vertices
-- The `Array<Float>` → platform vector conversion is the main overhead compared to direct platform APIs
+- `resetDisplayObject` is called only on visible pool objects — unused objects are skipped
+- In shader path, `drawShaderTexturedTriangles` is called ~18 times per frame (after batching)
+- Batch FFI metadata API: 1 native call per frame instead of ~1400 per-drawable calls
+- UV and index data cached at construction (0 FFI at runtime); vertex positions cached with dirty markers
+- Vertex data per draw call: typically 50-500 vertices
