@@ -89,6 +89,24 @@ L2D_API void l2d_get_texture_path(L2D_Model m, int textureIndex, char* outBuf, i
 L2D_API float l2d_get_canvas_width(L2D_Model m);
 L2D_API float l2d_get_canvas_height(L2D_Model m);
 
+// ===== Framework Behavior Control =====
+L2D_API void  l2d_set_breath_enabled(L2D_Model m, bool enabled);
+L2D_API void  l2d_set_eye_blink_enabled(L2D_Model m, bool enabled);
+L2D_API void  l2d_set_expression_enabled(L2D_Model m, bool enabled);
+L2D_API void  l2d_set_look_enabled(L2D_Model m, bool enabled);
+L2D_API void  l2d_set_physics_enabled(L2D_Model m, bool enabled);
+L2D_API void  l2d_set_lip_sync_enabled(L2D_Model m, bool enabled);
+L2D_API void  l2d_set_pose_enabled(L2D_Model m, bool enabled);
+
+// ===== LipSync Value (external audio/microphone input) =====
+// value: 0.0~1.0 for external mode, <0 to revert to wav file handler
+L2D_API void  l2d_set_lip_sync_value(L2D_Model m, float value);
+
+// ===== Moc Version Checking =====
+L2D_API unsigned int l2d_get_core_version();
+L2D_API unsigned int l2d_get_latest_moc_version();
+L2D_API bool l2d_has_moc_consistency(const char* mocFilePath);
+
 #ifdef __cplusplus
 }
 #endif

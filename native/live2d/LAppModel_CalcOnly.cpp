@@ -34,6 +34,22 @@ LAppModel_CalcOnly::LAppModel_CalcOnly()
     , _modelSetting(NULL)
     , _userTimeSeconds(0.0f)
     , _motionUpdated(false)
+    , _breathUpdater(NULL)
+    , _eyeBlinkUpdater(NULL)
+    , _expressionUpdater(NULL)
+    , _lookUpdater(NULL)
+    , _physicsUpdater(NULL)
+    , _lipSyncUpdater(NULL)
+    , _poseUpdater(NULL)
+    , _breathEnabled(true)
+    , _eyeBlinkEnabled(true)
+    , _expressionEnabled(true)
+    , _lookEnabled(true)
+    , _physicsEnabled(true)
+    , _lipSyncEnabled(true)
+    , _poseEnabled(true)
+    , _useExternalLipSync(false)
+    , _externalLipSyncValue(0.0f)
 {
     if (LAppDefine::MocConsistencyValidationEnable)
     {
@@ -59,15 +75,28 @@ LAppModel_CalcOnly::LAppModel_CalcOnly()
 
 LAppModel_CalcOnly::~LAppModel_CalcOnly()
 {
+    // Clean up manually managed updaters
+    if (_breathUpdater) { CSM_DELETE(_breathUpdater); _breathUpdater = NULL; }
+    if (_eyeBlinkUpdater) { CSM_DELETE(_eyeBlinkUpdater); _eyeBlinkUpdater = NULL; }
+    if (_expressionUpdater) { CSM_DELETE(_expressionUpdater); _expressionUpdater = NULL; }
+    if (_lookUpdater) { CSM_DELETE(_lookUpdater); _lookUpdater = NULL; }
+    if (_physicsUpdater) { CSM_DELETE(_physicsUpdater); _physicsUpdater = NULL; }
+    if (_lipSyncUpdater) { CSM_DELETE(_lipSyncUpdater); _lipSyncUpdater = NULL; }
+    if (_poseUpdater) { CSM_DELETE(_poseUpdater); _poseUpdater = NULL; }
+
     ReleaseMotions();
     ReleaseExpressions();
 
-    for (csmInt32 i = 0; i < _modelSetting->GetMotionGroupCount(); i++)
+    if (_modelSetting != NULL)
     {
-        const csmChar* group = _modelSetting->GetMotionGroupName(i);
-        ReleaseMotionGroup(group);
+        for (csmInt32 i = 0; i < _modelSetting->GetMotionGroupCount(); i++)
+        {
+            const csmChar* group = _modelSetting->GetMotionGroupName(i);
+            ReleaseMotionGroup(group);
+        }
+        delete(_modelSetting);
+        _modelSetting = NULL;
     }
-    delete(_modelSetting);
 }
 
 void LAppModel_CalcOnly::LoadAssets(const csmChar* dir, const csmChar* fileName)
@@ -83,6 +112,12 @@ void LAppModel_CalcOnly::LoadAssets(const csmChar* dir, const csmChar* fileName)
     const csmString path = csmString(dir) + fileName;
 
     csmByte* buffer = CreateBuffer(path.GetRawString(), &size);
+    if (buffer == NULL)
+    {
+        LAppPal_CalcOnly::PrintLogLn("[APP]ERROR: Failed to read model3.json: %s", path.GetRawString());
+        _model = NULL;
+        return;
+    }
     ICubismModelSetting* setting = new CubismModelSettingJson(buffer, size);
     DeleteBuffer(buffer, path.GetRawString());
 
@@ -150,7 +185,7 @@ void LAppModel_CalcOnly::SetupModel(ICubismModelSetting* setting)
             DeleteBuffer(buffer, path.GetRawString());
         }
         CubismExpressionUpdater* expression = CSM_NEW CubismExpressionUpdater(*_expressionManager);
-        _updateScheduler.AddUpdatableList(expression);
+        _expressionUpdater = expression;
     }
 
     // Physics
@@ -164,7 +199,7 @@ void LAppModel_CalcOnly::SetupModel(ICubismModelSetting* setting)
         if (_physics != nullptr)
         {
             CubismPhysicsUpdater* physics = CSM_NEW CubismPhysicsUpdater(*_physics);
-            _updateScheduler.AddUpdatableList(physics);
+            _physicsUpdater = physics;
         }
         DeleteBuffer(buffer, path.GetRawString());
     }
@@ -180,7 +215,7 @@ void LAppModel_CalcOnly::SetupModel(ICubismModelSetting* setting)
         if (_pose != nullptr)
         {
             CubismPoseUpdater* pose = CSM_NEW CubismPoseUpdater(*_pose);
-            _updateScheduler.AddUpdatableList(pose);
+            _poseUpdater = pose;
         }
         DeleteBuffer(buffer, path.GetRawString());
     }
@@ -192,7 +227,7 @@ void LAppModel_CalcOnly::SetupModel(ICubismModelSetting* setting)
             _eyeBlink = CubismEyeBlink::Create(_modelSetting);
 
             CubismEyeBlinkUpdater* eyeBlink = CSM_NEW CubismEyeBlinkUpdater(_motionUpdated, *_eyeBlink);
-            _updateScheduler.AddUpdatableList(eyeBlink);
+            _eyeBlinkUpdater = eyeBlink;
         }
     }
 
@@ -211,7 +246,7 @@ void LAppModel_CalcOnly::SetupModel(ICubismModelSetting* setting)
         _breath->SetParameters(breathParameters);
 
         CubismBreathUpdater* breath = CSM_NEW CubismBreathUpdater(*_breath);
-        _updateScheduler.AddUpdatableList(breath);
+        _breathUpdater = breath;
     }
 
     // UserData
@@ -241,7 +276,7 @@ void LAppModel_CalcOnly::SetupModel(ICubismModelSetting* setting)
             _lipSyncIds.PushBack(_modelSetting->GetLipSyncParameterId(i));
         }
         CubismLipSyncUpdater* lipSync = CSM_NEW CubismLipSyncUpdater(_lipSyncIds, _wavFileHandler);
-        _updateScheduler.AddUpdatableList(lipSync);
+        _lipSyncUpdater = lipSync;
     }
 
     // Look
@@ -260,10 +295,10 @@ void LAppModel_CalcOnly::SetupModel(ICubismModelSetting* setting)
         _look->SetParameters(lookParameters);
 
         CubismLookUpdater* look = CSM_NEW CubismLookUpdater(*_look, *_dragManager);
-        _updateScheduler.AddUpdatableList(look);
+        _lookUpdater = look;
     }
 
-    _updateScheduler.SortUpdatableList();
+    // Note: Not using _updateScheduler.SortUpdatableList() since we manage updaters manually
 
     if (_modelSetting == NULL || _modelMatrix == NULL)
     {
@@ -379,7 +414,34 @@ void LAppModel_CalcOnly::Update()
 
     _opacity = _model->GetModelOpacity();
 
-    _updateScheduler.OnLateUpdate(_model, deltaTimeSeconds);
+    // Manual updater calls with enabled checks (same order as CubismUpdateOrder)
+    if (_eyeBlinkEnabled && _eyeBlinkUpdater)
+        _eyeBlinkUpdater->OnLateUpdate(_model, deltaTimeSeconds);
+    if (_expressionEnabled && _expressionUpdater)
+        _expressionUpdater->OnLateUpdate(_model, deltaTimeSeconds);
+    if (_lookEnabled && _lookUpdater)
+        _lookUpdater->OnLateUpdate(_model, deltaTimeSeconds);
+    if (_breathEnabled && _breathUpdater)
+        _breathUpdater->OnLateUpdate(_model, deltaTimeSeconds);
+    if (_physicsEnabled && _physicsUpdater)
+        _physicsUpdater->OnLateUpdate(_model, deltaTimeSeconds);
+    if (_lipSyncEnabled && _lipSyncUpdater)
+    {
+        if (_useExternalLipSync)
+        {
+            // Directly set lip sync parameter value from external source
+            for (csmUint32 i = 0; i < _lipSyncIds.GetSize(); ++i)
+            {
+                _model->AddParameterValue(_lipSyncIds[i], _externalLipSyncValue, 0.8f);
+            }
+        }
+        else
+        {
+            _lipSyncUpdater->OnLateUpdate(_model, deltaTimeSeconds);
+        }
+    }
+    if (_poseEnabled && _poseUpdater)
+        _poseUpdater->OnLateUpdate(_model, deltaTimeSeconds);
 
     _model->Update();
 }
@@ -574,3 +636,35 @@ void LAppModel_CalcOnly::GetTexturePath(csmInt32 textureIndex, csmChar* outBuf, 
     strncpy_s(outBuf, bufLen, textureFileName, bufLen - 1);
     outBuf[bufLen - 1] = '\0';
 }
+
+// ===== Framework Behavior Control =====
+
+void LAppModel_CalcOnly::SetBreathEnabled(csmBool enabled) { _breathEnabled = enabled; }
+void LAppModel_CalcOnly::SetEyeBlinkEnabled(csmBool enabled) { _eyeBlinkEnabled = enabled; }
+void LAppModel_CalcOnly::SetExpressionEnabled(csmBool enabled) { _expressionEnabled = enabled; }
+void LAppModel_CalcOnly::SetLookEnabled(csmBool enabled) { _lookEnabled = enabled; }
+void LAppModel_CalcOnly::SetPhysicsEnabled(csmBool enabled) { _physicsEnabled = enabled; }
+void LAppModel_CalcOnly::SetLipSyncEnabled(csmBool enabled) { _lipSyncEnabled = enabled; }
+void LAppModel_CalcOnly::SetPoseEnabled(csmBool enabled) { _poseEnabled = enabled; }
+
+void LAppModel_CalcOnly::SetLipSyncValue(csmFloat32 value)
+{
+    if (value < 0.0f)
+    {
+        _useExternalLipSync = false;
+        _externalLipSyncValue = 0.0f;
+    }
+    else
+    {
+        _useExternalLipSync = true;
+        _externalLipSyncValue = (value > 1.0f) ? 1.0f : value;
+    }
+}
+
+csmBool LAppModel_CalcOnly::IsBreathEnabled() const { return _breathEnabled; }
+csmBool LAppModel_CalcOnly::IsEyeBlinkEnabled() const { return _eyeBlinkEnabled; }
+csmBool LAppModel_CalcOnly::IsExpressionEnabled() const { return _expressionEnabled; }
+csmBool LAppModel_CalcOnly::IsLookEnabled() const { return _lookEnabled; }
+csmBool LAppModel_CalcOnly::IsPhysicsEnabled() const { return _physicsEnabled; }
+csmBool LAppModel_CalcOnly::IsLipSyncEnabled() const { return _lipSyncEnabled; }
+csmBool LAppModel_CalcOnly::IsPoseEnabled() const { return _poseEnabled; }

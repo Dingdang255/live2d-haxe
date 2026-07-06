@@ -16,6 +16,7 @@ import live2d.cubism.core.L2DModel;
 struct L2DFunctions {
     int (*test_add)(int, int);
     void (*framework_start_up)();
+    void (*framework_clean_up)();
     void* (*load_model)(const char*, const char*);
     void (*update)(void*);
     void (*set_delta_time)(float);
@@ -53,6 +54,17 @@ struct L2DFunctions {
     bool (*get_drawable_inverted_mask)(void*, int);
     bool (*get_drawable_dynamic_flag_vertex_positions_did_change)(void*, int);
     void (*get_drawable_batch_metadata)(void*, int, char*);
+    void (*set_breath_enabled)(void*, bool);
+    void (*set_eye_blink_enabled)(void*, bool);
+    void (*set_expression_enabled)(void*, bool);
+    void (*set_look_enabled)(void*, bool);
+    void (*set_physics_enabled)(void*, bool);
+    void (*set_lip_sync_enabled)(void*, bool);
+    void (*set_pose_enabled)(void*, bool);
+    void (*set_lip_sync_value)(void*, float);
+    unsigned int (*get_core_version)();
+    unsigned int (*get_latest_moc_version)();
+    bool (*has_moc_consistency)(const char*);
     bool loaded;
 };
 static L2DFunctions l2dFn = {0};
@@ -65,6 +77,7 @@ static void l2d_ensure_loaded() {
     #define L2D_LOAD(name) l2dFn.name = (decltype(l2dFn.name))GetProcAddress(h, "l2d_" #name)
     L2D_LOAD(test_add);
     L2D_LOAD(framework_start_up);
+    L2D_LOAD(framework_clean_up);
     L2D_LOAD(load_model);
     L2D_LOAD(update);
     L2D_LOAD(set_delta_time);
@@ -102,6 +115,17 @@ static void l2d_ensure_loaded() {
     L2D_LOAD(get_drawable_inverted_mask);
     L2D_LOAD(get_drawable_dynamic_flag_vertex_positions_did_change);
     L2D_LOAD(get_drawable_batch_metadata);
+    L2D_LOAD(set_breath_enabled);
+    L2D_LOAD(set_eye_blink_enabled);
+    L2D_LOAD(set_expression_enabled);
+    L2D_LOAD(set_look_enabled);
+    L2D_LOAD(set_physics_enabled);
+    L2D_LOAD(set_lip_sync_enabled);
+    L2D_LOAD(set_pose_enabled);
+    L2D_LOAD(set_lip_sync_value);
+    L2D_LOAD(get_core_version);
+    L2D_LOAD(get_latest_moc_version);
+    L2D_LOAD(has_moc_consistency);
     #undef L2D_LOAD
     l2dFn.loaded = true;
 }
@@ -123,7 +147,7 @@ class HxcppWindowsBridge implements ICubismBridge
 
     public function frameworkCleanUp():Void
     {
-        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.framework_start_up) { /* TODO: cleanup */ }');
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.framework_clean_up) l2dFn.framework_clean_up()');
     }
 
     // ===== Lifecycle =====
@@ -333,6 +357,67 @@ class HxcppWindowsBridge implements ICubismBridge
     public function getCanvasHeight(model:L2DModel):Float
     {
         return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.get_canvas_height ? l2dFn.get_canvas_height(M((cpp::Int64){0})) : 0.0f)', m(model));
+    }
+
+    // ===== Framework Behavior Control =====
+
+    public function setBreathEnabled(model:L2DModel, enabled:Bool):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.set_breath_enabled) l2dFn.set_breath_enabled(M((cpp::Int64){0}), {1})', m(model), enabled);
+    }
+
+    public function setEyeBlinkEnabled(model:L2DModel, enabled:Bool):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.set_eye_blink_enabled) l2dFn.set_eye_blink_enabled(M((cpp::Int64){0}), {1})', m(model), enabled);
+    }
+
+    public function setExpressionEnabled(model:L2DModel, enabled:Bool):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.set_expression_enabled) l2dFn.set_expression_enabled(M((cpp::Int64){0}), {1})', m(model), enabled);
+    }
+
+    public function setLookEnabled(model:L2DModel, enabled:Bool):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.set_look_enabled) l2dFn.set_look_enabled(M((cpp::Int64){0}), {1})', m(model), enabled);
+    }
+
+    public function setPhysicsEnabled(model:L2DModel, enabled:Bool):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.set_physics_enabled) l2dFn.set_physics_enabled(M((cpp::Int64){0}), {1})', m(model), enabled);
+    }
+
+    public function setLipSyncEnabled(model:L2DModel, enabled:Bool):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.set_lip_sync_enabled) l2dFn.set_lip_sync_enabled(M((cpp::Int64){0}), {1})', m(model), enabled);
+    }
+
+    public function setPoseEnabled(model:L2DModel, enabled:Bool):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.set_pose_enabled) l2dFn.set_pose_enabled(M((cpp::Int64){0}), {1})', m(model), enabled);
+    }
+
+    // ===== LipSync Value =====
+
+    public function setLipSyncValue(model:L2DModel, value:Float):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.set_lip_sync_value) l2dFn.set_lip_sync_value(M((cpp::Int64){0}), {1})', m(model), value);
+    }
+
+    // ===== Moc Version Checking =====
+
+    public function getCoreVersion():Int
+    {
+        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.get_core_version ? (int)l2dFn.get_core_version() : 0)');
+    }
+
+    public function getLatestMocVersion():Int
+    {
+        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.get_latest_moc_version ? (int)l2dFn.get_latest_moc_version() : 0)');
+    }
+
+    public function hasMocConsistency(mocFilePath:String):Bool
+    {
+        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.has_moc_consistency ? l2dFn.has_moc_consistency({0}.utf8_str()) : false)', mocFilePath);
     }
 }
 

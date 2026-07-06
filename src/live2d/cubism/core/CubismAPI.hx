@@ -168,4 +168,43 @@ class CubismAPI
 
     public static function getCanvasHeight(model:L2DModel):Float
         return getBridge().getCanvasHeight(model);
+
+    // ===== Framework Behavior Control =====
+
+    public static function setBreathEnabled(model:L2DModel, enabled:Bool):Void
+        getBridge().setBreathEnabled(model, enabled);
+
+    public static function setEyeBlinkEnabled(model:L2DModel, enabled:Bool):Void
+        getBridge().setEyeBlinkEnabled(model, enabled);
+
+    public static function setExpressionEnabled(model:L2DModel, enabled:Bool):Void
+        getBridge().setExpressionEnabled(model, enabled);
+
+    public static function setLookEnabled(model:L2DModel, enabled:Bool):Void
+        getBridge().setLookEnabled(model, enabled);
+
+    public static function setPhysicsEnabled(model:L2DModel, enabled:Bool):Void
+        getBridge().setPhysicsEnabled(model, enabled);
+
+    public static function setLipSyncEnabled(model:L2DModel, enabled:Bool):Void
+        getBridge().setLipSyncEnabled(model, enabled);
+
+    public static function setPoseEnabled(model:L2DModel, enabled:Bool):Void
+        getBridge().setPoseEnabled(model, enabled);
+
+    // ===== LipSync Value =====
+
+    public static function setLipSyncValue(model:L2DModel, value:Float):Void
+        getBridge().setLipSyncValue(model, value);
+
+    // ===== Moc Version Checking =====
+
+    public static function getCoreVersion():Int
+        return getBridge().getCoreVersion();
+
+    public static function getLatestMocVersion():Int
+        return getBridge().getLatestMocVersion();
+
+    public static function hasMocConsistency(mocFilePath:String):Bool
+        return getBridge().hasMocConsistency(mocFilePath);
 }

@@ -29,7 +29,7 @@ live2d-haxe uses a **CalcOnly** architecture: the C++ native layer handles all c
 live2d.cubism
 ├── core/                    # Platform-agnostic core
 │   ├── L2DModel.hx          # Model handle type (#if cpp)
-│   ├── ICubismBridge.hx     # Native bridge interface
+│   ├── ICubismBridge.hx     # Native bridge interface (46 methods)
 │   ├── CubismAPI.hx         # Static API facade
 │   └── bridge/
 │       └── HxcppWindowsBridge.hx  # hxcpp + Windows (#if cpp)
@@ -44,10 +44,8 @@ live2d.cubism
 │   ├── L2DFlixelComponent.hx  # FlxBasic wrapper (#if flixel)
 │   └── L2DFlixelManager.hx    # Static manager with cache (#if flixel)
 ├── L2DCore.hx               # Core logic (platform-independent)
-├── L2D.hx                   # @:deprecated typedef → CubismAPI
-├── L2DModel.hx              # @:deprecated typedef → core.L2DModel
-├── L2DComponent.hx          # @:deprecated typedef → L2DFlixelComponent
-└── L2DManager.hx            # @:deprecated typedef → L2DFlixelManager
+├── L2DModel.hx              # typedef → core.L2DModel
+└── L2DManager.hx            # typedef → flixel.L2DFlixelManager
 ```
 
 ## Key Interfaces
@@ -56,7 +54,7 @@ live2d.cubism
 
 Abstracts the native C API access. Each platform/target provides its own implementation for loading and calling the native library.
 
-**Methods**: 35 functions matching the C API contract — framework lifecycle, model lifecycle, update, parameters, animation, expressions, interaction, drawable data, masks, textures, model info.
+**Methods**: 46 functions matching the C API contract — framework lifecycle, model lifecycle, update, parameters, animation, expressions, interaction, drawable data, masks, textures, model info, framework behavior control (7 enabled + lip sync value), moc version checking (3).
 
 **Current implementations**:
 - `HxcppWindowsBridge` — Uses `GetProcAddress`/`LoadLibraryA` on Windows (#if cpp)
@@ -111,4 +109,6 @@ L2DCore
 4. **All vertex transforms in L2DCore** — renderer receives pre-transformed screen-space data, no coordinate system knowledge needed
 5. **GPU shader-first with automatic fallback** — `CubismRendererShader` handles mask/color/opacity in fragment shader for maximum batching; falls back to Sprite.mask when shader unsupported or model has >3 mask groups
 6. **Batch FFI metadata** — Single C API call returns all drawable metadata (48 bytes/drawable), reducing per-frame FFI calls from ~4000 to ~10
-7. **Backward compatibility** — deprecated typedefs allow existing `L2D`, `L2DComponent`, `L2DManager` imports to keep working
+7. **Backward compatibility** — `L2DManager` and `L2DModel` typedefs allow existing imports to keep working; `L2DComponent` and `L2D` were removed in v0.5 as breaking changes
+8. **Manual updater management** — 7 Framework behavior updaters (Breath, EyeBlink, Expression, Look, Physics, LipSync, Pose) are stored as member pointers instead of registered with `_updateScheduler`, enabling per-module enable/disable control from Haxe side
+9. **Moc version checking** — `hasMocConsistency()` checks moc3 files against the current Core before loading, preventing silent crashes on incompatible models

@@ -4,9 +4,9 @@ import flixel.FlxG;
 import flixel.FlxState;
 import flixel.text.FlxText;
 import flixel.math.FlxPoint;
-import live2d.cubism.L2DComponent;
-import live2d.cubism.L2DManager;
-import live2d.cubism.L2D;
+import live2d.cubism.flixel.L2DFlixelComponent;
+import live2d.cubism.flixel.L2DFlixelManager;
+import live2d.cubism.L2DCore;
 
 /**
  * Demo state showing basic Live2D Cubism usage with Flixel.
@@ -18,6 +18,9 @@ import live2d.cubism.L2D;
  *   - Mouse wheel: Scale model (Shift for faster)
  *   - E: Random expression
  *   - M: Play motion
+ *   - B: Toggle breath
+ *   - P: Toggle physics
+ *   - L: Toggle lip sync
  *   - LEFT/RIGHT: Switch model
  */
 class L2DDemoState extends FlxState
@@ -25,7 +28,7 @@ class L2DDemoState extends FlxState
     var modelList:Array<String> = ['Haru', 'Hiyori', 'Mao', 'Mark', 'Natori', 'Rice'];
     var currentModelIndex:Int = 0;
 
-    var l2d:L2DComponent;
+    var l2d:L2DFlixelComponent;
     var infoText:FlxText;
     var statusText:FlxText;
     var dragging:Bool = false;
@@ -39,18 +42,19 @@ class L2DDemoState extends FlxState
 
         // Info text
         infoText = new FlxText(10, 10, FlxG.width - 20,
-            'Live2D Haxe Demo\n'
+            'Live2D Haxe Demo v0.5\n'
             + 'Click: Hit test + motion\n'
             + 'Hold mouse: Eye tracking\n'
             + 'Ctrl + drag: Move model\n'
             + 'Wheel: Scale (Shift=fast)\n'
             + 'E: Expression | M: Motion\n'
+            + 'B: Breath | P: Physics | L: LipSync\n'
             + 'LEFT/RIGHT: Switch model'
         );
         infoText.setFormat(null, 14, 0xFFFFFFFF);
         add(infoText);
 
-        statusText = new FlxText(10, 170, FlxG.width - 20, '');
+        statusText = new FlxText(10, 200, FlxG.width - 20, '');
         statusText.setFormat(null, 12, 0xFFCCCCCC);
         add(statusText);
 
@@ -63,12 +67,12 @@ class L2DDemoState extends FlxState
         if (l2d != null)
         {
             FlxG.removeChild(l2d.getSprite());
-            L2DManager.destroy(l2d);
+            L2DFlixelManager.destroy(l2d);
             l2d = null;
         }
 
         var modelName = modelList[index];
-        l2d = L2DManager.create('assets/live2d/$modelName/', '$modelName.model3.json');
+        l2d = L2DFlixelManager.create('assets/live2d/$modelName/', '$modelName.model3.json');
 
         if (l2d.model.notNull())
         {
@@ -118,8 +122,8 @@ class L2DDemoState extends FlxState
         }
 
         // Update and render
-        L2DManager.updateAll(elapsed);
-        L2DManager.renderAll();
+        L2DFlixelManager.updateAll(elapsed);
+        L2DFlixelManager.renderAll();
 
         // Hit test on click
         if (FlxG.mouse.justPressed && !FlxG.keys.pressed.CONTROL)
@@ -172,6 +176,22 @@ class L2DDemoState extends FlxState
         {
             l2d.startMotion('TapBody', 0, 3);
         }
+        // Framework behavior toggles
+        if (FlxG.keys.justPressed.B)
+        {
+            l2d.core.setBreathEnabled(!l2d.core.breathEnabled);
+            statusText.text = 'Breath: ${l2d.core.breathEnabled}';
+        }
+        if (FlxG.keys.justPressed.P)
+        {
+            l2d.core.setPhysicsEnabled(!l2d.core.physicsEnabled);
+            statusText.text = 'Physics: ${l2d.core.physicsEnabled}';
+        }
+        if (FlxG.keys.justPressed.L)
+        {
+            l2d.core.setLipSyncEnabled(!l2d.core.lipSyncEnabled);
+            statusText.text = 'LipSync: ${l2d.core.lipSyncEnabled}';
+        }
         #end
     }
 
@@ -181,7 +201,8 @@ class L2DDemoState extends FlxState
         {
             FlxG.removeChild(l2d.getSprite());
         }
-        L2DManager.destroyAll();
+        L2DFlixelManager.destroyAll();
+        L2DFlixelManager.clearTextureCache();
         FlxG.mouse.visible = false;
         super.destroy();
     }

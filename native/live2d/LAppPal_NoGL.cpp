@@ -3,6 +3,7 @@
  * Compatible with SDK Common interface
  * 
  * Copyright(c) Live2D Inc. All rights reserved.
+ * Use of this source code is governed by the Live2D Open Software license.
  */
 
 // Include the SDK's LAppPal.hpp from OpenGL Demo directory
@@ -27,15 +28,11 @@ int LAppPal::s_frame = 0;
 
 csmByte* LAppPal::LoadFileAsBytes(const string filePath, csmSizeInt* outSize)
 {
-    wchar_t wideStr[MAX_PATH];
-    MultiByteToWideChar(CP_UTF8, 0U, filePath.c_str(), -1, wideStr, MAX_PATH);
-
     int size = 0;
     struct _stat statBuf;
-    if (_wstat(wideStr, &statBuf) == 0)
+    if (_stat(filePath.c_str(), &statBuf) == 0)
     {
         size = statBuf.st_size;
-
         if (size == 0)
         {
             return NULL;
@@ -46,8 +43,7 @@ csmByte* LAppPal::LoadFileAsBytes(const string filePath, csmSizeInt* outSize)
         return NULL;
     }
 
-    std::wfstream file;
-    file.open(wideStr, std::ios::in | std::ios::binary);
+    std::ifstream file(filePath, std::ios::binary);
     if (!file.is_open())
     {
         return NULL;
@@ -55,11 +51,7 @@ csmByte* LAppPal::LoadFileAsBytes(const string filePath, csmSizeInt* outSize)
 
     *outSize = size;
     csmChar* buf = new char[*outSize];
-    std::wfilebuf* fileBuf = file.rdbuf();
-    for (csmUint32 i = 0; i < *outSize; i++)
-    {
-        buf[i] = fileBuf->sbumpc();
-    }
+    file.read(buf, *outSize);
     file.close();
 
     return reinterpret_cast<csmByte*>(buf);

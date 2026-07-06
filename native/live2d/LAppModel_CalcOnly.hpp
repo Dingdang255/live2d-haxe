@@ -13,6 +13,14 @@
 #include <Type/csmRectF.hpp>
 #include <LAppWavFileHandler_Common.hpp>
 #include <LAppModel_Common.hpp>
+#include <Motion/ICubismUpdater.hpp>
+#include <Motion/CubismBreathUpdater.hpp>
+#include <Motion/CubismEyeBlinkUpdater.hpp>
+#include <Motion/CubismExpressionUpdater.hpp>
+#include <Motion/CubismLookUpdater.hpp>
+#include <Motion/CubismPhysicsUpdater.hpp>
+#include <Motion/CubismLipSyncUpdater.hpp>
+#include <Motion/CubismPoseUpdater.hpp>
 
 /**
  * CalcOnly model class
@@ -128,5 +136,49 @@ private:
     const Csm::CubismId* _idParamEyeBallY;
     Csm::csmBool _motionUpdated;
 
+    // Framework behavior updaters (managed manually, not through _updateScheduler)
+    Csm::CubismBreathUpdater* _breathUpdater;
+    Csm::CubismEyeBlinkUpdater* _eyeBlinkUpdater;
+    Csm::CubismExpressionUpdater* _expressionUpdater;
+    Csm::CubismLookUpdater* _lookUpdater;
+    Csm::CubismPhysicsUpdater* _physicsUpdater;
+    Csm::CubismLipSyncUpdater* _lipSyncUpdater;
+    Csm::CubismPoseUpdater* _poseUpdater;
+
+    // Enabled flags for each module (default: all true)
+    Csm::csmBool _breathEnabled;
+    Csm::csmBool _eyeBlinkEnabled;
+    Csm::csmBool _expressionEnabled;
+    Csm::csmBool _lookEnabled;
+    Csm::csmBool _physicsEnabled;
+    Csm::csmBool _lipSyncEnabled;
+    Csm::csmBool _poseEnabled;
+
+    // External lip sync (when true, uses _externalLipSyncValue instead of wav file handler)
+    Csm::csmBool _useExternalLipSync;
+    Csm::csmFloat32 _externalLipSyncValue;
+
     LAppWavFileHandler_Common _wavFileHandler;
+
+public:
+    // Framework behavior control
+    void SetBreathEnabled(Csm::csmBool enabled);
+    void SetEyeBlinkEnabled(Csm::csmBool enabled);
+    void SetExpressionEnabled(Csm::csmBool enabled);
+    void SetLookEnabled(Csm::csmBool enabled);
+    void SetPhysicsEnabled(Csm::csmBool enabled);
+    void SetLipSyncEnabled(Csm::csmBool enabled);
+    void SetPoseEnabled(Csm::csmBool enabled);
+
+    // External lip sync value (0~1, set <0 to revert to wav file handler)
+    void SetLipSyncValue(Csm::csmFloat32 value);
+
+    // Query enabled state
+    Csm::csmBool IsBreathEnabled() const;
+    Csm::csmBool IsEyeBlinkEnabled() const;
+    Csm::csmBool IsExpressionEnabled() const;
+    Csm::csmBool IsLookEnabled() const;
+    Csm::csmBool IsPhysicsEnabled() const;
+    Csm::csmBool IsLipSyncEnabled() const;
+    Csm::csmBool IsPoseEnabled() const;
 };

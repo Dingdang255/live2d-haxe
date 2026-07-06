@@ -8,6 +8,8 @@ import live2d.cubism.core.CubismAPI;
 import live2d.cubism.core.ICubismBridge;
 import live2d.cubism.core.L2DModel;
 
+using StringTools;
+
 /**
  * Platform-independent core logic for Live2D model rendering.
  *
@@ -118,6 +120,15 @@ class L2DCore
     var destroyed:Bool = false;
     var firstFrame:Bool = true;
 
+    // Framework behavior enabled state (mirrors C++ side)
+    public var breathEnabled(default, null):Bool = true;
+    public var eyeBlinkEnabled(default, null):Bool = true;
+    public var expressionEnabled(default, null):Bool = true;
+    public var lookEnabled(default, null):Bool = true;
+    public var physicsEnabled(default, null):Bool = true;
+    public var lipSyncEnabled(default, null):Bool = true;
+    public var poseEnabled(default, null):Bool = true;
+
     static var frameworkInitialized:Bool = false;
 
     // Static sort comparator (avoid closure allocation per frame)
@@ -140,8 +151,31 @@ class L2DCore
             trace('[L2D] Initializing framework...');
             bridge.frameworkStartUp();
             frameworkInitialized = true;
-            trace('[L2D] Framework initialized');
+
+            var coreVer = bridge.getCoreVersion();
+            var latestMoc = bridge.getLatestMocVersion();
+            trace('[L2D] Cubism Core version: ${coreVer}');
+            trace('[L2D] Supported moc version: ≤${latestMoc}');
         }
+
+        // Pre-load moc3 version check
+        var mocPath = dir + fileName.replace('.model3.json', '.moc3');
+        var consistent = bridge.hasMocConsistency(mocPath);
+        if (!consistent)
+        {
+            var latestMoc = bridge.getLatestMocVersion();
+            var coreVer = bridge.getCoreVersion();
+            trace('[L2D] ERROR: moc3 file incompatible with current Core!');
+            trace('[L2D]   File: $mocPath');
+            trace('[L2D]   Core version: $coreVer, supported moc version: ≤$latestMoc');
+            trace('[L2D]   Possible causes:');
+            trace('[L2D]     1. moc3 was exported with a newer Cubism Editor than the Core supports');
+            trace('[L2D]     2. The moc3 file is corrupted or missing');
+            trace('[L2D]   Possible fix: re-export from Cubism Editor with lower target version');
+            model = L2DModel.NULL;
+            return;
+        }
+        trace('[L2D] moc3 consistency check passed: $mocPath');
 
         model = bridge.loadModel(dir, fileName);
         if (model.isNull())
@@ -1539,4 +1573,68 @@ class L2DCore
         if (model.isNull()) return 0;
         return bridge.getCanvasHeight(model);
     }
+
+    // ===== Framework Behavior Control =====
+
+    public function setBreathEnabled(enabled:Bool):Void
+    {
+        breathEnabled = enabled;
+        if (model.notNull()) bridge.setBreathEnabled(model, enabled);
+    }
+
+    public function setEyeBlinkEnabled(enabled:Bool):Void
+    {
+        eyeBlinkEnabled = enabled;
+        if (model.notNull()) bridge.setEyeBlinkEnabled(model, enabled);
+    }
+
+    public function setExpressionEnabled(enabled:Bool):Void
+    {
+        expressionEnabled = enabled;
+        if (model.notNull()) bridge.setExpressionEnabled(model, enabled);
+    }
+
+    public function setLookEnabled(enabled:Bool):Void
+    {
+        lookEnabled = enabled;
+        if (model.notNull()) bridge.setLookEnabled(model, enabled);
+    }
+
+    public function setPhysicsEnabled(enabled:Bool):Void
+    {
+        physicsEnabled = enabled;
+        if (model.notNull()) bridge.setPhysicsEnabled(model, enabled);
+    }
+
+    public function setLipSyncEnabled(enabled:Bool):Void
+    {
+        lipSyncEnabled = enabled;
+        if (model.notNull()) bridge.setLipSyncEnabled(model, enabled);
+    }
+
+    public function setPoseEnabled(enabled:Bool):Void
+    {
+        poseEnabled = enabled;
+        if (model.notNull()) bridge.setPoseEnabled(model, enabled);
+    }
+
+    /**
+     * Set external lip sync value (0.0~1.0 for mouth open amount).
+     * Pass a negative value to revert to wav file handler mode.
+     */
+    public function setLipSyncValue(value:Float):Void
+    {
+        if (model.notNull()) bridge.setLipSyncValue(model, value);
+    }
+
+    // ===== Moc Version Checking =====
+
+    public static function getCoreVersion():Int
+        return CubismAPI.getCoreVersion();
+
+    public static function getLatestMocVersion():Int
+        return CubismAPI.getLatestMocVersion();
+
+    public static function hasMocConsistency(mocFilePath:String):Bool
+        return CubismAPI.hasMocConsistency(mocFilePath);
 }

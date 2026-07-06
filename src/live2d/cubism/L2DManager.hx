@@ -1,7 +1,6 @@
 package live2d.cubism;
 
 /**
- * Deprecated: Use live2d.cubism.flixel.L2DFlixelManager instead.
+ * Backward-compatible alias for L2DFlixelManager.
  */
-@:deprecated("Use live2d.cubism.flixel.L2DFlixelManager instead")
 typedef L2DManager = live2d.cubism.flixel.L2DFlixelManager;

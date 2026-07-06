@@ -4,9 +4,9 @@
   "license": "MIT",
   "tags": ["live2d", "cubism", "openfl", "flixel", "cpp", "native", "multi-backend"],
   "description": "Live2D Cubism SDK for Haxe - GPU shader rendering with multi-backend abstraction",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "classPath": "src",
-  "releasenote": "GPU Shader pipeline: CubismRendererShader, batch FFI metadata, vertex caching, full batch merging",
+  "releasenote": "v0.5.0: Framework behavior control (7 modules), external LipSync, moc version checking, utest suite. BREAKING: L2DComponent and L2D typedefs removed.",
   "contributors": ["Dingdang255"],
   "dependencies": {
     "hxcpp": "4.2.1"

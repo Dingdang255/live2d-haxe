@@ -279,6 +279,46 @@ if (FlxG.mouse.pressed)
 }
 ```
 
+### Framework Behavior Control
+
+v0.5.0 adds runtime enable/disable for all 7 Framework behavior modules, plus external lip sync value input:
+
+```haxe
+// Toggle behavior modules at runtime (all enabled by default)
+l2d.core.setBreathEnabled(false);      // Disable breathing animation
+l2d.core.setPhysicsEnabled(false);     // Disable physics simulation
+l2d.core.setEyeBlinkEnabled(false);    // Disable auto-blinking
+l2d.core.setExpressionEnabled(false);  // Disable expression updates
+l2d.core.setLookEnabled(false);        // Disable look/gaze tracking
+l2d.core.setLipSyncEnabled(false);     // Disable lip sync
+l2d.core.setPoseEnabled(false);        // Disable pose transitions
+
+// Read current enabled state
+trace(l2d.core.breathEnabled);   // true/false
+
+// External lip sync (microphone/audio RMS → mouth open amount)
+l2d.core.setLipSyncValue(0.5);   // 0.0~1.0 mouth openness
+l2d.core.setLipSyncValue(-1.0);  // <0 reverts to wav file handler mode
+```
+
+### Moc Version Checking
+
+v0.5.0 adds moc3 version consistency checking API. Loading incompatible models now outputs detailed error messages instead of silent crashes:
+
+```haxe
+import live2d.cubism.L2DCore;
+
+// Static methods, no model instance needed
+var coreVer = L2DCore.getCoreVersion();         // Core DLL version number
+var latestMoc = L2DCore.getLatestMocVersion();  // Highest supported moc version
+var ok = L2DCore.hasMocConsistency("path/to/model.moc3");  // Check compatibility
+
+// L2DCore automatically checks on load
+// On incompatibility: [L2D] ERROR: moc3 file incompatible with current Core!
+//   Core supports moc version ≤ X
+//   Possible fix: re-export from Cubism Editor with lower target version
+```
+
 ### Low-Level API (CubismAPI)
 
 For advanced use, the `CubismAPI` class provides direct access to all C API functions:
@@ -308,22 +348,22 @@ var opacity = CubismAPI.getDrawableOpacity(model, 0);
 var isVisible = CubismAPI.isDrawableVisible(model, 0);
 ```
 
-### Backward Compatibility
+### Migrating from v0.4 to v0.5
 
-The old import paths still work via deprecated typedefs:
+v0.5.0 removes `L2DComponent` and `L2D` deprecated typedefs as breaking changes. Update your imports:
 
 ```haxe
-// Old (deprecated, still works)
-import live2d.cubism.L2DComponent;       // → L2DFlixelComponent
-import live2d.cubism.L2DManager;          // → L2DFlixelManager
-import live2d.cubism.L2D;                 // → CubismAPI
-import live2d.cubism.L2DModel;            // → core.L2DModel
+// v0.4 old (removed)
+import live2d.cubism.L2DComponent;       // ❌ No longer exists
+import live2d.cubism.L2D;                 // ❌ No longer exists
 
-// New (recommended)
+// v0.5 new
 import live2d.cubism.flixel.L2DFlixelComponent;
-import live2d.cubism.flixel.L2DFlixelManager;
 import live2d.cubism.core.CubismAPI;
-import live2d.cubism.core.L2DModel;
+
+// Still available as aliases
+import live2d.cubism.L2DManager;          // ✅ Alias for L2DFlixelManager
+import live2d.cubism.L2DModel;            // ✅ Alias for core.L2DModel
 ```
 
 ## API Reference
@@ -369,17 +409,35 @@ import live2d.cubism.core.L2DModel;
 | `model` | Underlying `L2DModel` handle |
 | `modelWidth`, `modelHeight` | Computed model bounds |
 | `ownsTextures` | Whether this instance owns texture lifecycle (default: true) |
+| `breathEnabled` | Breathing animation enabled state |
+| `eyeBlinkEnabled` | Auto-blink enabled state |
+| `expressionEnabled` | Expression update enabled state |
+| `lookEnabled` | Look/gaze tracking enabled state |
+| `physicsEnabled` | Physics simulation enabled state |
+| `lipSyncEnabled` | Lip sync enabled state |
+| `poseEnabled` | Pose transition enabled state |
 | `startMotion(group, no, priority)` | Play a motion |
 | `startIdleMotion()` | Play random Idle motion |
 | `setExpression(id)` | Set expression by ID |
 | `setRandomExpression()` | Set random expression |
 | `hitTest(areaName, px, py)` | Hit test at screen coordinates |
 | `setDragging(screenX, screenY)` | Set drag/follow target |
+| `setBreathEnabled(enabled)` | Toggle breathing animation |
+| `setEyeBlinkEnabled(enabled)` | Toggle auto-blink |
+| `setExpressionEnabled(enabled)` | Toggle expression updates |
+| `setLookEnabled(enabled)` | Toggle look/gaze tracking |
+| `setPhysicsEnabled(enabled)` | Toggle physics simulation |
+| `setLipSyncEnabled(enabled)` | Toggle lip sync |
+| `setPoseEnabled(enabled)` | Toggle pose transitions |
+| `setLipSyncValue(value)` | Set external lip sync value (0~1, <0 reverts to wav mode) |
 | `getContainer()` | Get root display handle |
 | `render()` | Redraw all visible drawables |
 | `update(elapsed)` | Update model with delta time |
 | `destroy()` | Release model and resources |
 | `getCanvasWidth()`, `getCanvasHeight()` | Model canvas dimensions |
+| `getCoreVersion()` | Get Cubism Core version (static) |
+| `getLatestMocVersion()` | Get highest supported moc version (static) |
+| `hasMocConsistency(path)` | Check moc3 file compatibility (static) |
 
 ### CubismAPI (static facade)
 
@@ -392,7 +450,18 @@ import live2d.cubism.core.L2DModel;
 | `loadModel(dir, fileName)` | Load a model from directory |
 | `releaseModel(model)` | Release a model |
 | `update(model)` | Update model state |
-| ... | All 35 C API functions are available as static methods |
+| `setBreathEnabled(model, enabled)` | Toggle breathing animation |
+| `setEyeBlinkEnabled(model, enabled)` | Toggle auto-blink |
+| `setExpressionEnabled(model, enabled)` | Toggle expression updates |
+| `setLookEnabled(model, enabled)` | Toggle look/gaze tracking |
+| `setPhysicsEnabled(model, enabled)` | Toggle physics simulation |
+| `setLipSyncEnabled(model, enabled)` | Toggle lip sync |
+| `setPoseEnabled(model, enabled)` | Toggle pose transitions |
+| `setLipSyncValue(model, value)` | Set external lip sync value |
+| `getCoreVersion()` | Get Cubism Core version |
+| `getLatestMocVersion()` | Get highest supported moc version |
+| `hasMocConsistency(path)` | Check moc3 file compatibility |
+| ... | All 46 C API functions are available as static methods |
 
 ## Project Configuration
 

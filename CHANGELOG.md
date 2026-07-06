@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-07-06
+
+### v0.5.0 — Framework behavior control + moc version checking
+
+**One-line:** Add runtime enable/disable control for all 7 Framework behavior modules (Breath, EyeBlink, Expression, Look, Physics, LipSync, Pose), external LipSync value input, and moc3 version consistency checking API.
+
+**Full description:**
+
+This release gives Haxe-side full control over Framework behavior modules that were previously always-on inside C++ with no external control. It also adds moc3 version checking APIs for compatibility validation before model loading.
+
+- **BREAKING CHANGE** — `L2DComponent` and `L2D` typedefs in `live2d.cubism` package have been removed. Use `L2DFlixelComponent` and `CubismAPI` instead. `L2DManager` and `L2DModel` aliases are preserved.
+- **Framework Behavior Control** — 7 new `setXxxEnabled()` methods on `L2DCore` allow runtime enable/disable of each behavior module: `setBreathEnabled`, `setEyeBlinkEnabled`, `setExpressionEnabled`, `setLookEnabled`, `setPhysicsEnabled`, `setLipSyncEnabled`, `setPoseEnabled`. All modules default to enabled (backward compatible). Each has a corresponding read-only property (e.g. `breathEnabled`).
+- **External LipSync** — `setLipSyncValue(0.0~1.0)` allows driving mouth open amount from external audio/microphone input. Pass negative value to revert to internal wav file handler mode. Uses `model->AddParameterValue()` with 0.8 weight, same as the internal `CubismLipSyncUpdater`.
+- **Moc Version Checking** — `L2DCore.getCoreVersion()` and `L2DCore.getLatestMocVersion()` return the Cubism Core version and highest supported moc version. `L2DCore.hasMocConsistency(mocFilePath)` checks a .moc3 file against the current Core without loading a model. L2DCore constructor automatically checks on load and outputs detailed error messages on incompatibility.
+- **Manual Updater Management** — The 7 updaters are no longer registered with `_updateScheduler`; instead stored as member pointers in `LAppModel_CalcOnly` and manually called in `Update()` with enabled checks. This enables per-module control without modifying SDK Framework source.
+- **frameworkCleanUp Fix** — `l2d_framework_clean_up` function pointer was missing from `HxcppWindowsBridge`, causing the cleanup method to be a no-op. Now properly loads and calls `CubismFramework::Dispose()` + `CubismFramework::CleanUp()`.
+- **C++ Robustness** — `LoadAssets` now checks for NULL buffer (file not found) before passing to JSON parser, preventing abort(). `l2d_load_model` returns NULL on failure instead of dangling pointer. Destructor guards against NULL `_modelSetting`.
+- **Demo Migration** — Demo (`L2DDemoState.hx`) migrated to new API (`L2DFlixelComponent`/`L2DFlixelManager`), added B/P/L keyboard shortcuts for toggling Breath/Physics/LipSync.
+
+---
+
+### v0.5.0 — Framework 行为控制 + moc 版本检测
+
+**一行描述：** 新增 7 个 Framework 行为模块的运行时开关、外部口型同步值输入、moc3 版本一致性检测 API。
+
+**完整描述：**
+
+本版本让 Haxe 侧获得了对 Framework 行为模块的完整控制权，这些模块之前在 C++ 内部始终运行且无法外部控制。同时新增了 moc3 版本检测 API 用于加载前兼容性校验。
+
+- **破坏性变更** — `live2d.cubism` 包中的 `L2DComponent` 和 `L2D` typedef 已移除。请使用 `L2DFlixelComponent` 和 `CubismAPI` 替代。`L2DManager` 和 `L2DModel` 别名保留。
+- **Framework 行为控制** — `L2DCore` 新增 7 个 `setXxxEnabled()` 方法，允许运行时开关各行为模块：`setBreathEnabled`、`setEyeBlinkEnabled`、`setExpressionEnabled`、`setLookEnabled`、`setPhysicsEnabled`、`setLipSyncEnabled`、`setPoseEnabled`。所有模块默认启用（向后兼容），每个模块有对应的只读属性（如 `breathEnabled`）。
+- **外部口型同步** — `setLipSyncValue(0.0~1.0)` 允许从外部音频/麦克风输入驱动口型张开度。传入负值切换回内部 wav 文件处理模式。使用 `model->AddParameterValue()` 加权 0.8，与内部 `CubismLipSyncUpdater` 行为一致。
+- **moc 版本检测** — `L2DCore.getCoreVersion()` 和 `L2DCore.getLatestMocVersion()` 返回 Cubism Core 版本和最高支持的 moc 版本。`L2DCore.hasMocConsistency(mocFilePath)` 直接读取 .moc3 文件检查与当前 Core 的一致性，无需加载模型。L2DCore 构造函数在加载时自动检测，不兼容时输出详细错误信息。
+- **手动 Updater 管理** — 7 个 Updater 不再注册到 `_updateScheduler`，改为在 `LAppModel_CalcOnly` 中存储为成员指针并在 `Update()` 中手动调用（带 enabled 检查），无需修改 SDK Framework 源码即可实现逐模块控制。
+- **frameworkCleanUp 修复** — `HxcppWindowsBridge` 中缺少 `l2d_framework_clean_up` 函数指针加载，导致清理方法为空操作。现已正确加载并调用 `CubismFramework::Dispose()` + `CubismFramework::CleanUp()`。
+- **C++ 健壮性** — `LoadAssets` 现在检查 NULL 缓冲区（文件不存在），防止传给 JSON 解析器导致 abort()。`l2d_load_model` 加载失败时返回 NULL 而非悬空指针。析构函数增加 `_modelSetting` NULL 保护。
+- **Demo 迁移** — Demo（`L2DDemoState.hx`）已迁移至新 API（`L2DFlixelComponent`/`L2DFlixelManager`），新增 B/P/L 键盘快捷键用于切换 Breath/Physics/LipSync。
+
 ## [0.4.0] - 2026-07-05
 
 ### v0.4.0 — GPU Shader rendering pipeline

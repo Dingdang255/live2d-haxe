@@ -279,6 +279,46 @@ if (FlxG.mouse.pressed)
 }
 ```
 
+### Framework 行为控制
+
+v0.5.0 新增 7 个 Framework 行为模块的运行时开关，以及外部口型同步值输入：
+
+```haxe
+// 运行时开关各行为模块（默认全部启用）
+l2d.core.setBreathEnabled(false);      // 关闭呼吸动画
+l2d.core.setPhysicsEnabled(false);     // 关闭物理演算
+l2d.core.setEyeBlinkEnabled(false);    // 关闭自动眨眼
+l2d.core.setExpressionEnabled(false);  // 关闭表情更新
+l2d.core.setLookEnabled(false);        // 关闭视线追踪
+l2d.core.setLipSyncEnabled(false);     // 关闭口型同步
+l2d.core.setPoseEnabled(false);        // 关闭姿势过渡
+
+// 读取当前启用状态
+trace(l2d.core.breathEnabled);   // true/false
+
+// 外部口型同步（麦克风/音频 RMS → 嘴巴张开度）
+l2d.core.setLipSyncValue(0.5);   // 0.0~1.0 嘴巴张开度
+l2d.core.setLipSyncValue(-1.0);  // <0 切回 wav 文件处理模式
+```
+
+### moc 版本检测
+
+v0.5.0 新增 moc3 版本一致性检测 API，加载不兼容模型时会输出详细错误信息而非静默崩溃：
+
+```haxe
+import live2d.cubism.L2DCore;
+
+// 静态方法，无需模型实例
+var coreVer = L2DCore.getCoreVersion();         // Core DLL 版本号
+var latestMoc = L2DCore.getLatestMocVersion();  // 最高支持的 moc 版本
+var ok = L2DCore.hasMocConsistency("path/to/model.moc3");  // 检查兼容性
+
+// L2DCore 加载时自动检测
+// 不兼容时输出：[L2D] ERROR: moc3 file incompatible with current Core!
+//   Core supports moc version ≤ X
+//   Possible fix: re-export from Cubism Editor with lower target version
+```
+
 ### 底层 API（CubismAPI）
 
 高级用法可直接使用 `CubismAPI` 类访问全部 C API 函数：
@@ -308,22 +348,22 @@ var opacity = CubismAPI.getDrawableOpacity(model, 0);
 var isVisible = CubismAPI.isDrawableVisible(model, 0);
 ```
 
-### 向后兼容
+### 从 v0.4 迁移到 v0.5
 
-旧的导入路径通过 deprecated typedef 仍然可用：
+v0.5.0 移除了 `L2DComponent` 和 `L2D` 两个 deprecated typedef。如果你使用了旧导入路径，请更新：
 
 ```haxe
-// 旧写法（已弃用，但仍可工作）
-import live2d.cubism.L2DComponent;       // → L2DFlixelComponent
-import live2d.cubism.L2DManager;          // → L2DFlixelManager
-import live2d.cubism.L2D;                 // → CubismAPI
-import live2d.cubism.L2DModel;            // → core.L2DModel
+// v0.4 旧写法（已移除）
+import live2d.cubism.L2DComponent;       // ❌ 不再存在
+import live2d.cubism.L2D;                 // ❌ 不再存在
 
-// 新写法（推荐）
+// v0.5 新写法
 import live2d.cubism.flixel.L2DFlixelComponent;
-import live2d.cubism.flixel.L2DFlixelManager;
 import live2d.cubism.core.CubismAPI;
-import live2d.cubism.core.L2DModel;
+
+// 仍可用的别名
+import live2d.cubism.L2DManager;          // ✅ 保留为 L2DFlixelManager 的别名
+import live2d.cubism.L2DModel;            // ✅ 保留为 core.L2DModel 的别名
 ```
 
 ## API 参考
@@ -369,17 +409,35 @@ import live2d.cubism.core.L2DModel;
 | `model` | 底层 `L2DModel` 句柄 |
 | `modelWidth`, `modelHeight` | 计算得到的模型边界 |
 | `ownsTextures` | 是否持有纹理生命周期（默认 true） |
+| `breathEnabled` | 呼吸动画启用状态 |
+| `eyeBlinkEnabled` | 自动眨眼启用状态 |
+| `expressionEnabled` | 表情更新启用状态 |
+| `lookEnabled` | 视线追踪启用状态 |
+| `physicsEnabled` | 物理演算启用状态 |
+| `lipSyncEnabled` | 口型同步启用状态 |
+| `poseEnabled` | 姿势过渡启用状态 |
 | `startMotion(group, no, priority)` | 播放动作 |
 | `startIdleMotion()` | 播放随机空闲动作 |
 | `setExpression(id)` | 按 ID 设置表情 |
 | `setRandomExpression()` | 设置随机表情 |
 | `hitTest(areaName, px, py)` | 在屏幕坐标处进行命中测试 |
 | `setDragging(screenX, screenY)` | 设置拖拽/跟随目标 |
+| `setBreathEnabled(enabled)` | 开关呼吸动画 |
+| `setEyeBlinkEnabled(enabled)` | 开关自动眨眼 |
+| `setExpressionEnabled(enabled)` | 开关表情更新 |
+| `setLookEnabled(enabled)` | 开关视线追踪 |
+| `setPhysicsEnabled(enabled)` | 开关物理演算 |
+| `setLipSyncEnabled(enabled)` | 开关口型同步 |
+| `setPoseEnabled(enabled)` | 开关姿势过渡 |
+| `setLipSyncValue(value)` | 设置外部口型同步值（0~1，<0 切回 wav） |
 | `getContainer()` | 获取根显示对象句柄 |
 | `render()` | 重绘所有可见 drawable |
 | `update(elapsed)` | 使用 deltaTime 更新模型 |
 | `destroy()` | 释放模型和资源 |
 | `getCanvasWidth()`, `getCanvasHeight()` | 模型画布尺寸 |
+| `getCoreVersion()` | 获取 Cubism Core 版本号（静态） |
+| `getLatestMocVersion()` | 获取最高支持的 moc 版本（静态） |
+| `hasMocConsistency(path)` | 检查 moc3 文件兼容性（静态） |
 
 ### CubismAPI（静态门面）
 
@@ -392,7 +450,18 @@ import live2d.cubism.core.L2DModel;
 | `loadModel(dir, fileName)` | 从目录加载模型 |
 | `releaseModel(model)` | 释放模型 |
 | `update(model)` | 更新模型状态 |
-| ... | 全部 35 个 C API 函数均可作为静态方法调用 |
+| `setBreathEnabled(model, enabled)` | 开关呼吸动画 |
+| `setEyeBlinkEnabled(model, enabled)` | 开关自动眨眼 |
+| `setExpressionEnabled(model, enabled)` | 开关表情更新 |
+| `setLookEnabled(model, enabled)` | 开关视线追踪 |
+| `setPhysicsEnabled(model, enabled)` | 开关物理演算 |
+| `setLipSyncEnabled(model, enabled)` | 开关口型同步 |
+| `setPoseEnabled(model, enabled)` | 开关姿势过渡 |
+| `setLipSyncValue(model, value)` | 设置外部口型同步值 |
+| `getCoreVersion()` | 获取 Core 版本号 |
+| `getLatestMocVersion()` | 获取最高支持的 moc 版本 |
+| `hasMocConsistency(path)` | 检查 moc3 文件兼容性 |
+| ... | 全部 46 个 C API 函数均可作为静态方法调用 |
 
 ## 项目配置
 

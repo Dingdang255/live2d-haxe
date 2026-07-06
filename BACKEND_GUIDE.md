@@ -56,6 +56,9 @@ _bridge = new HxcppLinuxBridge();
 - **Bytes output**: Use `out->b.mPtr->GetBase()` to get raw pointer from `haxe.io.Bytes`
 - **Model handles**: `L2DModel` is `abstract L2DModel(cpp.Int64)`, cast via `cast(value, cpp.Int64)`
 - **Batch metadata**: `getDrawableBatchMetadata()` returns a `Bytes` buffer with 48 bytes per drawable
+- **Framework behavior control** (v0.5+): 7 `setXxxEnabled(model, enabled)` methods for Breath/EyeBlink/Expression/Look/Physics/LipSync/Pose, plus `setLipSyncValue(model, value)` for external audio input
+- **Moc version checking** (v0.5+): `getCoreVersion()`, `getLatestMocVersion()`, `hasMocConsistency(path)` — static methods, no model handle needed
+- **Total methods**: 46 (framework lifecycle 2 + model lifecycle 2 + update 2 + parameters 4 + animation 3 + expression 2 + interaction 2 + drawable 12 + mask 4 + batch 1 + texture 2 + model info 2 + behavior control 7 + lip sync value 1 + version checking 3 - 1 getBridge not in interface)
 
 ## Step 2: Implement IL2DRenderer
 

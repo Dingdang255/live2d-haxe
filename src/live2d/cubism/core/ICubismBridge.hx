@@ -72,4 +72,21 @@ interface ICubismBridge
     // Model info
     function getCanvasWidth(model:L2DModel):Float;
     function getCanvasHeight(model:L2DModel):Float;
+
+    // Framework behavior control
+    function setBreathEnabled(model:L2DModel, enabled:Bool):Void;
+    function setEyeBlinkEnabled(model:L2DModel, enabled:Bool):Void;
+    function setExpressionEnabled(model:L2DModel, enabled:Bool):Void;
+    function setLookEnabled(model:L2DModel, enabled:Bool):Void;
+    function setPhysicsEnabled(model:L2DModel, enabled:Bool):Void;
+    function setLipSyncEnabled(model:L2DModel, enabled:Bool):Void;
+    function setPoseEnabled(model:L2DModel, enabled:Bool):Void;
+
+    // LipSync value (external audio/microphone input)
+    function setLipSyncValue(model:L2DModel, value:Float):Void;
+
+    // Moc version checking
+    function getCoreVersion():Int;
+    function getLatestMocVersion():Int;
+    function hasMocConsistency(mocFilePath:String):Bool;
 }

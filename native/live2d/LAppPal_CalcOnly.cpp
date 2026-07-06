@@ -62,12 +62,9 @@ void LAppPal_CalcOnly::PrintMessageLn(const Csm::csmChar* message)
 
 Csm::csmByte* LAppPal_CalcOnly::LoadFileAsBytes(const std::string filePath, Csm::csmSizeInt* outSize)
 {
-    wchar_t wideStr[MAX_PATH];
-    MultiByteToWideChar(CP_UTF8, 0U, filePath.c_str(), -1, wideStr, MAX_PATH);
-
     int size = 0;
     struct _stat statBuf;
-    if (_wstat(wideStr, &statBuf) == 0)
+    if (_stat(filePath.c_str(), &statBuf) == 0)
     {
         size = statBuf.st_size;
         if (size == 0)
@@ -82,8 +79,7 @@ Csm::csmByte* LAppPal_CalcOnly::LoadFileAsBytes(const std::string filePath, Csm:
         return NULL;
     }
 
-    std::wfstream file;
-    file.open(wideStr, std::ios::in | std::ios::binary);
+    std::ifstream file(filePath, std::ios::binary);
     if (!file.is_open())
     {
         PrintLogLn("File open failed. path:%s", filePath.c_str());
@@ -92,11 +88,7 @@ Csm::csmByte* LAppPal_CalcOnly::LoadFileAsBytes(const std::string filePath, Csm:
 
     *outSize = size;
     csmChar* buf = new char[*outSize];
-    std::wfilebuf* fileBuf = file.rdbuf();
-    for (Csm::csmUint32 i = 0; i < *outSize; i++)
-    {
-        buf[i] = fileBuf->sbumpc();
-    }
+    file.read(buf, *outSize);
     file.close();
 
     return reinterpret_cast<Csm::csmByte*>(buf);

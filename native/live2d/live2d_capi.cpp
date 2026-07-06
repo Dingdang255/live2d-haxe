@@ -13,6 +13,9 @@
 #include <Model/CubismModel.hpp>
 #include <Motion/CubismMotionQueueManager.hpp>
 #include <Live2DCubismCore.hpp>
+#include <Model/CubismMoc.hpp>
+#include <fstream>
+#include <vector>
 #include <LAppDefine.hpp>  // For LAppDefine::CubismLoggingLevel
 #include <cstring>
 #include <cstdio>
@@ -43,6 +46,13 @@ L2D_API L2D_Model l2d_load_model(const char* dir, const char* fileName)
 
     OutputDebugStringA("[L2D-CPP] Calling LoadAssets...\r\n");
     model->LoadAssets(dir, fileName);
+
+    if (model->GetModel() == NULL)
+    {
+        OutputDebugStringA("[L2D-CPP] LoadAssets failed, model is NULL. Deleting and returning NULL.\r\n");
+        delete model;
+        return NULL;
+    }
 
     OutputDebugStringA("[L2D-CPP] LoadAssets completed\r\n");
     return reinterpret_cast<L2D_Model>(model);
@@ -403,4 +413,120 @@ L2D_API float l2d_get_canvas_height(L2D_Model m)
     if (m == NULL) return 0.0f;
     CubismModel* model = GetModel(m)->GetModel();
     return model->GetCanvasHeightPixel();
+}
+
+// ===== Framework Behavior Control =====
+
+L2D_API void l2d_set_breath_enabled(L2D_Model m, bool enabled)
+{
+    if (m == NULL) return;
+    GetModel(m)->SetBreathEnabled(enabled);
+}
+
+L2D_API void l2d_set_eye_blink_enabled(L2D_Model m, bool enabled)
+{
+    if (m == NULL) return;
+    GetModel(m)->SetEyeBlinkEnabled(enabled);
+}
+
+L2D_API void l2d_set_expression_enabled(L2D_Model m, bool enabled)
+{
+    if (m == NULL) return;
+    GetModel(m)->SetExpressionEnabled(enabled);
+}
+
+L2D_API void l2d_set_look_enabled(L2D_Model m, bool enabled)
+{
+    if (m == NULL) return;
+    GetModel(m)->SetLookEnabled(enabled);
+}
+
+L2D_API void l2d_set_physics_enabled(L2D_Model m, bool enabled)
+{
+    if (m == NULL) return;
+    GetModel(m)->SetPhysicsEnabled(enabled);
+}
+
+L2D_API void l2d_set_lip_sync_enabled(L2D_Model m, bool enabled)
+{
+    if (m == NULL) return;
+    GetModel(m)->SetLipSyncEnabled(enabled);
+}
+
+L2D_API void l2d_set_pose_enabled(L2D_Model m, bool enabled)
+{
+    if (m == NULL) return;
+    GetModel(m)->SetPoseEnabled(enabled);
+}
+
+// ===== LipSync Value =====
+
+L2D_API void l2d_set_lip_sync_value(L2D_Model m, float value)
+{
+    if (m == NULL) return;
+    GetModel(m)->SetLipSyncValue(value);
+}
+
+// ===== Moc Version Checking =====
+
+L2D_API unsigned int l2d_get_core_version()
+{
+    return Live2D::Cubism::Core::csmGetVersion();
+}
+
+L2D_API unsigned int l2d_get_latest_moc_version()
+{
+    return Live2D::Cubism::Core::csmGetLatestMocVersion();
+}
+
+L2D_API bool l2d_has_moc_consistency(const char* mocFilePath)
+{
+    if (mocFilePath == NULL)
+    {
+        OutputDebugStringA("[L2D-CPP] l2d_has_moc_consistency: NULL path\r\n");
+        return false;
+    }
+
+    // Read moc3 file directly and check consistency (no model loading needed)
+    std::ifstream file(mocFilePath, std::ios::binary | std::ios::ate);
+    if (!file.is_open())
+    {
+        char buf[512];
+        sprintf_s(buf, "[L2D-CPP] l2d_has_moc_consistency: failed to open file: %s\r\n", mocFilePath);
+        OutputDebugStringA(buf);
+        return false;
+    }
+
+    auto size = file.tellg();
+    if (size <= 0)
+    {
+        char buf[512];
+        sprintf_s(buf, "[L2D-CPP] l2d_has_moc_consistency: file is empty: %s\r\n", mocFilePath);
+        OutputDebugStringA(buf);
+        return false;
+    }
+
+    file.seekg(0, std::ios::beg);
+
+    std::vector<char> buffer(size);
+    if (!file.read(buffer.data(), size))
+    {
+        char buf[512];
+        sprintf_s(buf, "[L2D-CPP] l2d_has_moc_consistency: failed to read file: %s\r\n", mocFilePath);
+        OutputDebugStringA(buf);
+        return false;
+    }
+    file.close();
+
+    bool result = CubismMoc::HasMocConsistencyFromUnrevivedMoc(
+        reinterpret_cast<csmByte*>(buffer.data()),
+        static_cast<csmSizeInt>(size)
+    );
+
+    char buf[512];
+    sprintf_s(buf, "[L2D-CPP] l2d_has_moc_consistency: %s -> %s (size=%lld)\r\n",
+        mocFilePath, result ? "PASS" : "FAIL", (long long)size);
+    OutputDebugStringA(buf);
+
+    return result;
 }
