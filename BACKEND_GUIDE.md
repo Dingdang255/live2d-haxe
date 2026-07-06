@@ -249,3 +249,68 @@ The `OpenFLRenderer` in `live2d.cubism.backend.openfl` is the reference implemen
 - Batch FFI metadata API: 1 native call per frame instead of ~1400 per-drawable calls
 - UV and index data cached at construction (0 FFI at runtime); vertex positions cached with dirty markers
 - Vertex data per draw call: typically 50-500 vertices
+
+## HashLink Backend Notes
+
+The HL target requires a `.hdll` native extension (C shim) because HL cannot use `untyped __cpp__()` or direct `LoadLibraryA` from Haxe code.
+
+### Architecture
+
+```
+Haxe (@:hlNative)  →  live2d_hl.hdll  →  live2d_capi.dll  →  Live2DCubismCore.dll
+    HL VM loads        Dynamic loading      C API bridge        Live2D SDK Core
+```
+
+### Type Mapping (HL ↔ C)
+
+| Haxe type | HL C type | C API type | Notes |
+|-----------|-----------|------------|-------|
+| `hl.I64` | `_I64` / `int64_t` | `void*` (pointer) | Model handles, M()/P() helpers |
+| `hl.Bytes` | `_BYTES` / `vbyte*` | `const char*` / `float*` / `int*` | String input, byte buffers |
+| `Int` | `_I32` | `int` | Counts, indices |
+| `Float` | `_F64` | `float` (cast) | Delta time, positions |
+| `Bool` | `_BOOL` | `bool` | Visibility, flags |
+
+### Key Differences from HxcppWindowsBridge
+
+1. **String handling**: cpp uses `str.utf8_str()`, HL uses `hl.Bytes.fromUTF8(str)` for input, null-terminator scanning + `getString()` for output
+2. **Bytes access**: cpp uses `out->b.mPtr->GetBase()`, HL uses `@:privateAccess out.b`
+3. **Function loading**: cpp uses `@:cppFileCode` inline C, HL uses .hdll `HL_PRIM`/`DEFINE_PRIM` macros
+4. **Float precision**: HL passes `_F64` (double), .hdll casts to `float` before calling C API
+
+### Building the .hdll
+
+```bash
+cd dev/native
+cmake -B build -DCUBISM_ROOT=/path/to/CubismSdkForNative-5-r.5 -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release --target live2d_hl
+```
+
+Output: `dev/lib/win/live2d_hl.hdll`
+
+### Running with HL target
+
+```bash
+cd dev/test
+lime test hl
+```
+
+Required DLLs/HDLLs in the HL output directory:
+- `live2d_hl.hdll` — HL native extension (loaded by HL VM)
+- `live2d_capi.dll` — C API bridge (loaded by .hdll via LoadLibraryA)
+- `Live2DCubismCore.dll` — Live2D SDK Core (dependency of live2d_capi.dll)
+- `libhl.dll` — HL runtime (automatically provided by Lime from its templates)
+
+### Lime Version Compatibility
+
+The .hdll is compiled using `hl.h` headers and `libhl.lib` from Lime's HL SDK. Since our .hdll only uses `HL_PRIM`/`DEFINE_PRIM` macros (type definitions and symbol export declarations) and does not call any `hl_*` functions at runtime, a .hdll compiled with one Lime version's SDK is compatible with any HL runtime version:
+
+| Compile with | Run with | Compatible? |
+|-------------|----------|-------------|
+| Lime 8.3.0 HL SDK | Lime 8.3.0 runtime | Yes |
+| Lime 8.3.0 HL SDK | Lime 8.0.1 runtime | Yes |
+| Lime 8.0.1 HL SDK* | Lime 8.0.1 runtime | Yes |
+
+\* Lime 8.0.1 does not include `include/hl.h`; CMake auto-detects Lime 8.3.0's headers for compilation.
+
+CMake auto-detection order: `lime/8,3,0` → `lime/8,0,1` (uses first one with `include/hl.h`). Override with `-DHL_ROOT=path`.

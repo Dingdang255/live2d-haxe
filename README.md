@@ -6,15 +6,23 @@ Live2D Cubism SDK for Haxe - multi-backend rendering abstraction with CalcOnly a
 
 This library provides a standalone, reusable Live2D Cubism integration for Haxe projects. It uses a "CalcOnly" approach where the C++ side only handles parameter calculation (physics, motion, expressions, etc.) while the Haxe side handles all rendering through a pluggable backend interface.
 
-**Current target:** Windows x64 (cpp target) | **Architecture:** Multi-backend (OpenFL/Flixel built-in, extensible to other frameworks)
+**Current targets:** Windows x64 (cpp + hl) | **Architecture:** Multi-backend (OpenFL/Flixel built-in, extensible to other frameworks)
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed architecture docs and [BACKEND_GUIDE.md](./BACKEND_GUIDE.md) for adding new backends.
 
 ## Demo
 
+### cpp target (Flixel/OpenFL)
+
 <video src="https://github.com/user-attachments/assets/c98ea2d4-15c6-4584-9d7d-ad84c42fa06a" controls="controls" style="max-width: 100%;"></video>
 
 > Demo showing model switching, hit test, expressions, motions, eye tracking, and scaling.
+
+### hl target (HashLink/JIT)
+
+<video src="https://github.com/user-attachments/assets/f8d0088d-1dd3-439c-93a8-d4b3d8b47742" controls="controls" style="max-width: 100%;"></video>
+
+> HashLink JIT-accelerated demo. Faster iteration with no C++ rebuild. Compatible with Lime 8.0.1 and 8.3.0.
 
 ## Architecture
 
@@ -30,7 +38,7 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed architecture docs and [BAC
 │  IL2DRenderer  ·  ICubismBridge                     │
 ├─────────────────────────────────────────────────────┤
 │  Backend Implementations                             │
-│  OpenFLRenderer · HxcppWindowsBridge · (future: ...)│
+│  OpenFLRenderer · HxcppWindowsBridge · HlWindowsBridge │
 └─────────────────────────────────────────────────────┘
          ↕ ICubismBridge (GetProcAddress/dlopen/...)
     live2d_capi.dll/.so/.dylib → Live2DCubismCore
@@ -39,19 +47,24 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed architecture docs and [BAC
 - **C++ Native Layer** (`live2d_capi.dll`): Flat C API wrapping the Cubism SDK. Only performs parameter/motion calculation, no OpenGL/DirectX rendering.
 - **Core Logic Layer** (`L2DCore`): Platform-independent batch building, mask grouping, vertex transformation, and render orchestration.
 - **Backend Interfaces** (`IL2DRenderer`, `ICubismBridge`): Contracts for rendering and native access, enabling multi-backend support.
-- **Backend Implementations**: `OpenFLRenderer` (drawTriangles), `HxcppWindowsBridge` (GetProcAddress). Adding a new backend only requires implementing these two interfaces.
+- **Backend Implementations**: `OpenFLRenderer` (drawTriangles), `HxcppWindowsBridge` (GetProcAddress, #if cpp), `HlWindowsBridge` (@:hlNative, #if hl). Adding a new backend only requires implementing these two interfaces.
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for full details and [BACKEND_GUIDE.md](./BACKEND_GUIDE.md) for adding new backends.
 
 ## Prerequisites
 
 - Haxe 4.2.5+
-- hxcpp 4.2.1+
 - CMake 3.16+
 - Visual Studio 2019/2022 (for native C++ compilation)
 - **Cubism SDK for Native 5-r.5** (NOT bundled - see below)
 
-For the Flixel/OpenFL backend (current default):
+For **cpp target**:
+- hxcpp 4.2.1+
+
+For **hl target**:
+- Lime 8.0.1+ (provides HL runtime, no extra haxelib needed)
+
+For the Flixel/OpenFL backend (default):
 - Lime 8.0.1+
 - OpenFL 9.2.1+
 - Flixel 4.11.0+
@@ -98,15 +111,19 @@ cmake .. -DCUBISM_ROOT="C:/SDK/CubismSdkForNative-5-r.5" -A x64
 cmake --build . --config Release
 ```
 
-After building, you will find in `lib/win/`:
+After building, you will find:
 
-- `live2d_capi.dll` - The C API bridge
-- `Live2DCubismCore.dll` - The Cubism Core (auto-copied from SDK)
+- `live2d_capi.dll` - The C API bridge (for cpp target), located in `lib/win/Release/`
+- `live2d_hl.hdll` - The HL native extension (for hl target), located in `lib/win/Release/`
+- `Live2DCubismCore.dll` - The Cubism Core (auto-copied from SDK), located in `lib/win/` (not in Release subdirectory)
+
+> **Note**: CMake auto-detects HL SDK from installed Lime versions (8.3.0 → 8.0.1, prioritized by `include/hl.h` presence). The .hdll is runtime-compatible with both Lime 8.0.1 and 8.3.0.
 
 ## Step 4: Copy DLLs to Your Project (Windows)
 
 The DLLs must be accessible at runtime. Copy them to your project's output directory:
 
+**For cpp target:**
 ```
 your_project/
   export/windows/cpp/bin/
@@ -115,7 +132,20 @@ your_project/
     Live2DCubismCore.dll   <-- copy here
 ```
 
-You can automate this with a post-build script.
+**For hl target:**
+```
+your_project/
+  bin/hl/bin/
+    your_app.exe
+    live2d_capi.dll        <-- copy here
+    live2d_hl.hdll         <-- copy here
+    Live2DCubismCore.dll   <-- copy here
+    libhl.dll              <-- auto-copied by Lime
+```
+
+> **Note**: `libhl.dll` is automatically copied by Lime from its templates. Do not manually copy it to avoid version mismatch.
+
+You can automate this with a post-build script (see `copy.bat` and `copy_hl.bat` in the test directory).
 
 ## Step 5: Prepare Live2D Model Assets
 
@@ -495,7 +525,7 @@ cmake .. -DCUBISM_ROOT="D:/SDK/CubismSdkForNative-5-r.5" -A x64
 
 ## Limitations
 
-- **Windows x64 only** (current bridge) - `HxcppWindowsBridge` uses Windows-specific `GetProcAddress`/`LoadLibraryA`. Linux/macOS support requires a new bridge implementation using `dlopen`/`dlsym`.
+- **Windows x64 only** (current bridges) - `HxcppWindowsBridge` (#if cpp) uses Windows-specific `GetProcAddress`/`LoadLibraryA`. `HlWindowsBridge` (#if hl) uses `@:hlNative` bindings to a .hdll shim that internally calls `LoadLibraryA`. Linux/macOS support requires new bridge implementations using `dlopen`/`dlsym`.
 - **CalcOnly rendering** - C++ side does no GPU rendering; all drawing is via the rendering backend (e.g., OpenFL's `drawTriangles` with GPU acceleration).
 - **GPU Shader path** (default) — Mask, Multiply/Screen color, and opacity handled by `CubismRendererShader` fragment shader. All drawables are batchable regardless of color/opacity. Batch key = (texture, blendMode, maskGroup, mulColor, scrColor, opacity). Automatic fallback to `Sprite.mask` when shader unsupported or model has >3 mask groups.
 - **Batched rendering** — Drawables sharing the same state are merged into one draw call. Typical models: ~18 batches from ~130 individual draw calls. Sprite pooling (32 batch + 16 mask) avoids per-frame allocation.

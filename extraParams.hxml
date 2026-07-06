@@ -4,7 +4,8 @@
 -D live2d_haxe
 
 # Required dependencies (must be added by user):
-# -lib hxcpp
+# For cpp target: -lib hxcpp
+# For hl target:  provided by Lime (no extra dependency needed)
 #
 # For Flixel/OpenFL backend:
 # -lib flixel

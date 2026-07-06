@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2026-07-06
+
+### v0.6.0 — HashLink backend support
+
+**One-line:** Add HashLink (HL) target support via .hdll native extension with dynamic loading shim, enabling JIT-accelerated development iteration and Heaps engine compatibility.
+
+**Full description:**
+
+This release adds a complete HashLink backend, allowing live2d-haxe to run on the HL target alongside the existing cpp target. HL provides faster iteration (JIT compilation, no C++ rebuild), lower memory footprint, and compatibility with the Heaps game engine.
+
+- **HlWindowsBridge** — New `ICubismBridge` implementation using `@:hlNative` bindings to `live2d_hl.hdll`. 51 native bindings covering all 46 ICubismBridge methods + init + 2 framework lifecycle calls. String input converted via `hl.Bytes.fromUTF8()`, Bytes output via `@:privateAccess out.b`.
+- **live2d_hl.hdll** — C shim (455 lines) that dynamically loads `live2d_capi.dll` at runtime via `LoadLibraryA + GetProcAddress`, forwarding all 47 C API calls through `HL_PRIM`/`DEFINE_PRIM` macros. Uses `int64_t` for pointer handles (`M()`/`P()` helpers), `vbyte*` for byte buffers, `double` for float parameters.
+- **L2DModel (HL)** — `abstract L2DModel(hl.I64)` with `isNull()` using `== cast 0`, symmetric with cpp target's `cpp.Int64` design.
+- **CMakeLists.txt** — New `live2d_hl` build target: links `libhl.lib`, outputs `.hdll` extension. Auto-detects HL SDK from installed Lime versions (8.3.0 → 8.0.1), with `-DHL_ROOT=path` override. Compatible with both Lime 8.0.1 and 8.3.0 runtimes since .hdll only uses type definitions and export macros.
+- **No rendering changes** — OpenFL/Flixel rendering layer works unchanged on HL target (no cpp-specific code in L2DCore, OpenFLRenderer, CubismRendererShader, L2DFlixelComponent, L2DFlixelManager).
+
+---
+
+### v0.6.0 — HashLink 后端支持
+
+**一行描述：** 新增 HashLink (HL) 目标支持，通过 .hdll 原生扩展和动态加载 shim 实现 JIT 加速的开发迭代和 Heaps 引擎兼容。
+
+**完整描述：**
+
+本版本新增完整的 HashLink 后端，允许 live2d-haxe 在 HL 目标上运行，与现有 cpp 目标并存。HL 提供更快的迭代速度（JIT 编译，无需 C++ 重建）、更低内存占用，以及与 Heaps 游戏引擎的兼容性。
+
+- **HlWindowsBridge** — 新的 `ICubismBridge` 实现，使用 `@:hlNative` 绑定到 `live2d_hl.hdll`。51 个原生绑定覆盖全部 46 个 ICubismBridge 方法 + init + 2 个 Framework 生命周期调用。字符串输入通过 `hl.Bytes.fromUTF8()` 转换，Bytes 输出通过 `@:privateAccess out.b` 提取。
+- **live2d_hl.hdll** — C shim（455 行），运行时通过 `LoadLibraryA + GetProcAddress` 动态加载 `live2d_capi.dll`，通过 `HL_PRIM`/`DEFINE_PRIM` 宏转发全部 47 个 C API 调用。使用 `int64_t` 作为指针句柄（`M()`/`P()` 辅助函数），`vbyte*` 用于字节缓冲区，`double` 用于浮点参数。
+- **L2DModel (HL)** — `abstract L2DModel(hl.I64)`，`isNull()` 使用 `== cast 0`，与 cpp 目标的 `cpp.Int64` 设计对称。
+- **CMakeLists.txt** — 新增 `live2d_hl` 构建目标：链接 `libhl.lib`，输出 `.hdll` 扩展名。自动检测已安装的 Lime 版本的 HL SDK（8.3.0 → 8.0.1），支持 `-DHL_ROOT=path` 覆盖。由于 .hdll 仅使用类型定义和导出宏，编译产物兼容 Lime 8.0.1 和 8.3.0 运行时。
+- **无渲染层变更** — OpenFL/Flixel 渲染层在 HL 目标上无需修改即可工作（L2DCore、OpenFLRenderer、CubismRendererShader、L2DFlixelComponent、L2DFlixelManager 中无 cpp 特定代码）。
+
 ## [0.5.0] - 2026-07-06
 
 ### v0.5.0 — Framework behavior control + moc version checking

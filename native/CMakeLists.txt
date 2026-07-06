@@ -192,3 +192,99 @@ add_custom_command(TARGET live2d_capi POST_BUILD
     "${CMAKE_SOURCE_DIR}/../lib/win/Live2DCubismCore.dll"
   COMMENT "Copying Live2DCubismCore.dll to output directory"
 )
+
+# ============================================================
+# 5) HashLink .hdll target
+# ============================================================
+# Builds live2d_hl.hdll — a thin shim that dynamically loads
+# live2d_capi.dll at runtime and forwards calls via HL_PRIM.
+#
+# HL SDK auto-detection:
+#   1. -DHL_ROOT=path — explicit override (must contain include/hl.h)
+#   2. Auto-search installed Lime versions for include/hl.h
+#
+# Note: The .hdll only uses hl.h for type definitions and macros
+# (HL_PRIM, DEFINE_PRIM). It does NOT call any hl_* functions at
+# runtime, so a .hdll compiled against one HL version is compatible
+# with any HL runtime (Lime 8.0.1 or 8.3.0) that loads it.
+# ============================================================
+
+# Auto-detect HL_ROOT if not specified
+if(NOT DEFINED HL_ROOT)
+    set(_HL_SEARCH_PATHS
+      "${CMAKE_SOURCE_DIR}/../../../lime/8,3,0/templates/bin/hl"
+      "${CMAKE_SOURCE_DIR}/../../../lime/8,0,1/templates/bin/hl"
+    )
+    foreach(_p ${_HL_SEARCH_PATHS})
+        if(EXISTS "${_p}/include/hl.h")
+            set(HL_ROOT "${_p}")
+            break()
+        endif()
+    endforeach()
+    if(NOT DEFINED HL_ROOT)
+        # No Lime version has include/hl.h — try without it
+        # (will use bundled hl.h if available)
+        foreach(_p ${_HL_SEARCH_PATHS})
+            if(EXISTS "${_p}/Windows64/libhl.lib")
+                set(HL_ROOT "${_p}")
+                set(HL_NO_INCLUDE ON)
+                break()
+            endif()
+        endforeach()
+    endif()
+endif()
+
+message(STATUS "HL_ROOT = ${HL_ROOT}")
+
+# Check for hl.h: prefer HL_ROOT/include, fall back to bundled copy
+if(EXISTS "${HL_ROOT}/include/hl.h")
+    set(HL_INCLUDE_DIR "${HL_ROOT}/include")
+elseif(EXISTS "${CMAKE_SOURCE_DIR}/hl/hl.h")
+    set(HL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/hl")
+    set(HL_NO_INCLUDE ON)
+    message(STATUS "Using bundled hl.h from ${HL_INCLUDE_DIR}")
+else()
+    set(HL_NO_INCLUDE ON)
+    message(WARNING "hl.h not found — .hdll build requires HL SDK headers. "
+        "Install Lime 8.3.0+ (which includes HL headers) or copy hl.h to dev/native/hl/")
+endif()
+
+if(DEFINED HL_INCLUDE_DIR)
+    add_library(live2d_hl SHARED
+      hl/live2d_hl.cpp
+    )
+    target_include_directories(live2d_hl PUBLIC
+      ${HL_INCLUDE_DIR}
+    )
+    # Link against HL runtime import library
+    if(EXISTS "${HL_ROOT}/Windows64/libhl.lib")
+        target_link_libraries(live2d_hl PUBLIC
+          "${HL_ROOT}/Windows64/libhl.lib"
+        )
+    else()
+        message(WARNING "libhl.lib not found at ${HL_ROOT}/Windows64/ — .hdll build will fail")
+    endif()
+
+    # .hdll is actually a DLL with custom extension
+    set_target_properties(live2d_hl PROPERTIES
+      OUTPUT_NAME "live2d_hl"
+      SUFFIX ".hdll"
+      RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/../lib/win"
+      LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/../lib/win"
+      ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/../lib/win"
+    )
+    # Suppress LNK4098 for HL too
+    target_link_options(live2d_hl PRIVATE "/NODEFAULTLIB:LIBCMT")
+
+    # Post-build: copy libhl.dll to output
+    if(EXISTS "${HL_ROOT}/Windows64/libhl.dll")
+        add_custom_command(TARGET live2d_hl POST_BUILD
+          COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${HL_ROOT}/Windows64/libhl.dll"
+            "${CMAKE_SOURCE_DIR}/../lib/win/libhl.dll"
+          COMMENT "Copying libhl.dll to output directory"
+        )
+    endif()
+elseif(NOT DEFINED HL_INCLUDE_DIR AND NOT HL_NO_INCLUDE)
+    message(STATUS "HL SDK not found — skipping .hdll build target")
+endif()

@@ -19,7 +19,7 @@ live2d-haxe uses a **CalcOnly** architecture: the C++ native layer handles all c
 │  IL2DRenderer  ·  ICubismBridge                     │  Contracts for rendering & native access
 ├─────────────────────────────────────────────────────┤
 │  Backend Implementation Layer                        │
-│  OpenFLRenderer · HxcppWindowsBridge · (future: ...)│  Platform-specific code
+│  OpenFLRenderer · HxcppWindowsBridge · HlWindowsBridge  │  Platform-specific code
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -32,7 +32,8 @@ live2d.cubism
 │   ├── ICubismBridge.hx     # Native bridge interface (46 methods)
 │   ├── CubismAPI.hx         # Static API facade
 │   └── bridge/
-│       └── HxcppWindowsBridge.hx  # hxcpp + Windows (#if cpp)
+│       ├── HxcppWindowsBridge.hx  # hxcpp + Windows (#if cpp)
+│       └── HlWindowsBridge.hx     # HashLink + Windows (#if hl)
 ├── backend/                 # Rendering abstraction
 │   ├── IL2DRenderer.hx      # Renderer interface
 │   ├── L2DTextureHandle.hx  # Opaque texture handle
@@ -58,6 +59,7 @@ Abstracts the native C API access. Each platform/target provides its own impleme
 
 **Current implementations**:
 - `HxcppWindowsBridge` — Uses `GetProcAddress`/`LoadLibraryA` on Windows (#if cpp)
+- `HlWindowsBridge` — Uses `@:hlNative` bindings to .hdll shim on Windows (#if hl)
 
 ### IL2DRenderer
 
@@ -112,3 +114,4 @@ L2DCore
 7. **Backward compatibility** — `L2DManager` and `L2DModel` typedefs allow existing imports to keep working; `L2DComponent` and `L2D` were removed in v0.5 as breaking changes
 8. **Manual updater management** — 7 Framework behavior updaters (Breath, EyeBlink, Expression, Look, Physics, LipSync, Pose) are stored as member pointers instead of registered with `_updateScheduler`, enabling per-module enable/disable control from Haxe side
 9. **Moc version checking** — `hasMocConsistency()` checks moc3 files against the current Core before loading, preventing silent crashes on incompatible models
+10. **Dual-target native bridge** — cpp target uses inline `untyped __cpp__()` with `@:cppFileCode` for DLL loading; HL target uses `.hdll` native extension with `@:hlNative` bindings, keeping the same ICubismBridge interface contract. Both delegate to the same `live2d_capi.dll` at runtime

@@ -25,4 +25,11 @@
     <section if="windows">
         <postbuild open="copy.bat"/>
     </section>
+
+    <!-- Copy DLLs/HDLLs for HL target -->
+    <section if="hl">
+        <section if="windows">
+            <postbuild open="copy_hl.bat"/>
+        </section>
+    </section>
 </project>

@@ -16,6 +16,8 @@ class CubismAPI
         {
             #if cpp
             _bridge = new live2d.cubism.core.bridge.HxcppWindowsBridge();
+            #elseif hl
+            _bridge = new live2d.cubism.core.bridge.HlWindowsBridge();
             #else
             throw "No native bridge available for this target";
             #end

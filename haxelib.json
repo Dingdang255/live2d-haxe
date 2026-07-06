@@ -2,11 +2,11 @@
   "name": "live2d-haxe",
   "url": "https://github.com/Dingdang255/live2d-haxe",
   "license": "MIT",
-  "tags": ["live2d", "cubism", "openfl", "flixel", "cpp", "native", "multi-backend"],
-  "description": "Live2D Cubism SDK for Haxe - GPU shader rendering with multi-backend abstraction",
-  "version": "0.5.0",
+  "tags": ["live2d", "cubism", "openfl", "flixel", "cpp", "hl", "native", "multi-backend"],
+  "description": "Live2D Cubism SDK for Haxe - GPU shader rendering with multi-backend abstraction (cpp + hl)",
+  "version": "0.6.0",
   "classPath": "src",
-  "releasenote": "v0.5.0: Framework behavior control (7 modules), external LipSync, moc version checking, utest suite. BREAKING: L2DComponent and L2D typedefs removed.",
+  "releasenote": "v0.6.0: HashLink (HL) backend support via .hdll native extension. Auto-detects Lime 8.0.1/8.3.0, compatible with both runtimes. JIT-accelerated iteration, Heaps engine compatibility. No breaking changes.",
   "contributors": ["Dingdang255"],
   "dependencies": {
     "hxcpp": "4.2.1"

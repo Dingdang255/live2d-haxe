@@ -6,15 +6,23 @@ Live2D Cubism SDK for Haxe —— 多后端渲染抽象层，基于 CalcOnly 架
 
 本库为 Haxe 项目提供独立、可复用的 Live2D Cubism 集成。采用 "CalcOnly" 方案：C++ 端仅负责参数计算（物理、动作、表情等），Haxe 端通过可插拔的后端接口完成全部渲染。
 
-**当前目标平台：** Windows x64（cpp 目标） | **架构：** 多后端（内置 OpenFL/Flixel，可扩展至其他框架）
+**当前目标平台：** Windows x64（cpp + hl 双目标） | **架构：** 多后端（内置 OpenFL/Flixel，可扩展至其他框架）
 
 详见 [ARCHITECTURE.md](./ARCHITECTURE.md) 架构文档和 [BACKEND_GUIDE.md](./BACKEND_GUIDE.md) 新后端开发指南。
 
 ## 演示
 
+### cpp 目标（Flixel/OpenFL）
+
 <video src="https://github.com/user-attachments/assets/c98ea2d4-15c6-4584-9d7d-ad84c42fa06a" controls="controls" style="max-width: 100%;"></video>
 
 > 演示了模型切换、点击命中测试、表情切换、动作播放、视线追踪和缩放。
+
+### hl 目标（HashLink/JIT）
+
+<video src="https://github.com/user-attachments/assets/f8d0088d-1dd3-439c-93a8-d4b3d8b47742" controls="controls" style="max-width: 100%;"></video>
+
+> HashLink JIT 加速演示。更快的开发迭代，无需 C++ 重编译。兼容 Lime 8.0.1 和 8.3.0。
 
 ## 架构
 
@@ -30,7 +38,7 @@ Live2D Cubism SDK for Haxe —— 多后端渲染抽象层，基于 CalcOnly 架
 │  IL2DRenderer  ·  ICubismBridge                     │
 ├─────────────────────────────────────────────────────┤
 │  后端实现层                                          │
-│  OpenFLRenderer · HxcppWindowsBridge · (未来: ...)   │
+│  OpenFLRenderer · HxcppWindowsBridge · HlWindowsBridge │
 └─────────────────────────────────────────────────────┘
          ↕ ICubismBridge (GetProcAddress/dlopen/...)
     live2d_capi.dll/.so/.dylib → Live2DCubismCore
@@ -39,19 +47,24 @@ Live2D Cubism SDK for Haxe —— 多后端渲染抽象层，基于 CalcOnly 架
 - **C++ 原生层**（`live2d_capi.dll`）：封装 Cubism SDK 的扁平 C API。仅执行参数/动作计算，不做 GPU 渲染。
 - **核心逻辑层**（`L2DCore`）：平台无关的批处理构建、遮罩分组、顶点变换和渲染调度。
 - **后端接口层**（`IL2DRenderer`、`ICubismBridge`）：渲染和原生访问的契约接口，支持多后端。
-- **后端实现层**：`OpenFLRenderer`（drawTriangles）、`HxcppWindowsBridge`（GetProcAddress）。添加新后端只需实现这两个接口。
+- **后端实现层**：`OpenFLRenderer`（drawTriangles）、`HxcppWindowsBridge`（GetProcAddress，#if cpp）、`HlWindowsBridge`（@:hlNative，#if hl）。添加新后端只需实现这两个接口。
 
 详见 [ARCHITECTURE.md](./ARCHITECTURE.md) 完整架构说明和 [BACKEND_GUIDE.md](./BACKEND_GUIDE.md) 新后端开发指南。
 
 ## 前置条件
 
 - Haxe 4.2.5+
-- hxcpp 4.2.1+
 - CMake 3.16+
 - Visual Studio 2019/2022（编译原生 C++）
 - **Cubism SDK for Native 5-r.5**（未随库附带，见下方说明）
 
-Flixel/OpenFL 后端（当前默认）额外需要：
+**cpp 目标**需要：
+- hxcpp 4.2.1+
+
+**hl 目标**需要：
+- Lime 8.0.1+（提供 HL 运行时，无需额外 haxelib）
+
+Flixel/OpenFL 后端（默认）额外需要：
 - Lime 8.0.1+
 - OpenFL 9.2.1+
 - Flixel 4.11.0+
@@ -98,15 +111,19 @@ cmake .. -DCUBISM_ROOT="C:/SDK/CubismSdkForNative-5-r.5" -A x64
 cmake --build . --config Release
 ```
 
-构建完成后，在 `lib/win/` 目录下可找到：
+构建完成后，你可以找到以下文件：
 
-- `live2d_capi.dll` — C API 桥接层
-- `Live2DCubismCore.dll` — Cubism Core（从 SDK 自动复制）
+- `live2d_capi.dll` — C API 桥接层（cpp 目标），位于 `lib/win/Release/`
+- `live2d_hl.hdll` — HL 原生扩展（hl 目标），位于 `lib/win/Release/`
+- `Live2DCubismCore.dll` — Cubism Core（从 SDK 自动复制），位于 `lib/win/` 目录（不在 Release 子目录）
+
+> **注意**：CMake 自动检测已安装的 Lime 版本的 HL SDK（8.3.0 → 8.0.1，按 `include/hl.h` 存在优先）。.hdll 与 Lime 8.0.1 和 8.3.0 运行时均兼容。
 
 ## 第 4 步：复制 DLL 到你的项目（Windows）
 
 DLL 必须在运行时可访问。将它们复制到项目的输出目录：
 
+**cpp 目标：**
 ```
 your_project/
   export/windows/cpp/bin/
@@ -115,7 +132,20 @@ your_project/
     Live2DCubismCore.dll   <-- 复制到这里
 ```
 
-可通过构建后脚本自动化。
+**hl 目标：**
+```
+your_project/
+  bin/hl/bin/
+    your_app.exe
+    live2d_capi.dll        <-- 复制到这里
+    live2d_hl.hdll         <-- 复制到这里
+    Live2DCubismCore.dll   <-- 复制到这里
+    libhl.dll              <-- Lime 自动复制
+```
+
+> **注意**：`libhl.dll` 由 Lime 从其 templates 自动复制，不要手动复制以避免版本不匹配。
+
+可通过构建后脚本自动化（参见 test 目录的 `copy.bat` 和 `copy_hl.bat`）。
 
 ## 第 5 步：准备 Live2D 模型资源
 
@@ -495,7 +525,7 @@ cmake .. -DCUBISM_ROOT="D:/SDK/CubismSdkForNative-5-r.5" -A x64
 
 ## 已知限制
 
-- **仅 Windows x64**（当前桥接层）— `HxcppWindowsBridge` 使用 Windows 特有的 `GetProcAddress`/`LoadLibraryA`。Linux/macOS 支持需要使用 `dlopen`/`dlsym` 实现新的桥接层。
+- **仅 Windows x64**（当前桥接层）— `HxcppWindowsBridge`（#if cpp）使用 Windows 特有的 `GetProcAddress`/`LoadLibraryA`。`HlWindowsBridge`（#if hl）使用 `@:hlNative` 绑定到内部调用 `LoadLibraryA` 的 .hdll shim。Linux/macOS 支持需要使用 `dlopen`/`dlsym` 实现新的桥接层。
 - **CalcOnly 渲染** — C++ 端不做 GPU 渲染；所有绘制通过渲染后端完成（如 OpenFL 的 `drawTriangles`，GPU 加速）。
 - **GPU 着色器路径**（默认）— 遮罩、正片叠底/滤色颜色和透明度由 `CubismRendererShader` 片段着色器处理。所有 drawable 均可合批，不受颜色/透明度限制。批键 = (texture, blendMode, maskGroup, mulColor, scrColor, opacity)。着色器不可用或模型超过 3 个遮罩组时自动回退至 `Sprite.mask`。
 - **批量渲染** — 状态相同的 drawable 合并为一次 draw call。典型模型：~18 个批次，来自 ~130 个独立 draw call。Sprite 池化（32 batch + 16 mask）避免每帧分配。
