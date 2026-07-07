@@ -540,7 +540,8 @@ haxe heaps_demo.hxml
 .\copy_heaps.bat
 
 # Run
-hl bin/heaps/heaps_demo.hl
+cd bin/heaps
+hl heaps_demo.hl
 ```
 
 ## API Reference
