@@ -1,0 +1,19 @@
+# Heaps Demo for Live2D Cubism (HL target)
+# ==================================================
+# Compile: haxe test\heaps_demo.hxml   (from dev/)
+#   or:    haxe heaps_demo.hxml        (from test/)
+# Run:     copy_heaps.bat  (copy dependencies)
+#          hl bin\heaps\heaps_demo.hl
+#
+# Required haxelibs: heaps, hlsdl, live2d-haxe, format (auto via heaps)
+# Required native: live2d_hl.hdll, Live2DCubismCore.dll, libhl.dll, sdl.hdll (via copy_heaps.bat)
+
+-cp .
+-lib heaps
+-lib hlsdl
+-lib live2d-haxe
+-D heaps
+-D live2d_haxe
+-dce full
+-main HeapsDemo
+-hl bin/heaps/heaps_demo.hl

@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2026-07-07
+
+### v0.7.0 — Heaps engine backend support
+
+**One-line:** Add Heaps 1.9.1 rendering backend via `HeapsRenderer` + `L2DHeapsObject` + `CubismHeapsShader`, enabling Live2D models to run natively on the Heaps game engine (HL target) without OpenFL/Flixel dependency.
+
+**Full description:**
+
+This release adds a complete Heaps backend, allowing live2d-haxe to render Live2D models through Heaps' `h2d` scene graph. This unlocks Heaps-based Haxe projects (games, tools, editors) to use Live2D without bridging through OpenFL. The Heaps backend runs on the HL target only (Heaps does not support hxcpp).
+
+- **HeapsRenderer** — New `IL2DRenderer` implementation using `h2d.Object` as container, `L2DMeshDrawable extends h2d.Drawable` as display object (8-float RawFormat vertices: x, y, u, v, r, g, b, a), and `h3d.mat.Texture` as texture. All 19 `IL2DRenderer` methods implemented. Texture loading via `format.png.Reader` (pure Haxe PNG decoder, no `fmt.hdll` dependency).
+- **L2DMeshDrawable** — `h2d.Drawable` subclass wrapping a `MeshPrimitive extends h3d.prim.Primitive`. Each frame: `updateMesh()` → `primitive.flush()` (reallocate GPU buffers via `Buffer.uploadVector` + `Indexes.upload`) → `ctx.beginDrawObject(this, texture)` → `primitive.render(engine)` (`engine.renderIndexed`). Note: `h3d.prim.Primitive` has no public constructor, so `MeshPrimitive.new()` does not call `super()`.
+- **CubismHeapsShader** — `hxsl.Shader` subclass (priority=200) handling mask sampling, Multiply/Screen color blending, and per-drawable opacity. Runs `fragment()` before `Base2d.fragment()` (priority=100) to modify the shared `pixelColor` variable. Toggle uniforms: `u_useMask`, `u_useColor`, `u_opacity`. Mask UVs computed from `absolutePosition.xy` (screen space) via `u_maskOffset` / `u_maskScale`.
+- **CubismMaskShader** — Solid-color fill `hxsl.Shader` for mask RT rendering. Outputs flat `u_color` per fragment. Used by `HeapsRenderer.renderMaskToBitmapData()` to draw mask shapes in R/G/B channels (one per mask group, up to 3 groups).
+- **Mask RT** — `renderMaskToBitmapData()` allocates `h3d.mat.Texture` with `[Target]` flag, uses `RenderContext.pushTarget(maskRT)` / `popTarget()` to render mask shapes off-screen. Screen-space vertices converted to RT-local by subtracting `offsetX`/`offsetY`. Y-axis flip handled automatically by `pushTarget`'s view matrix.
+- **L2DHeapsObject** — `h2d.Object` subclass wrapping `L2DCore` + `HeapsRenderer`. Auto-updates and renders in `sync(ctx)` via `hxd.Timer.dt` — adding it to the scene is enough, no manual `update`/`render` calls. Exposes Flixel-aligned convenience API (`startMotion`, `setExpression`, `hitTest`, `setDragging`, `setBreathEnabled`, etc.) and `core` field for advanced access.
+- **Non-premultiplied alpha** — Critical difference from OpenFL backend: Heaps `BlendMode.Alpha` uses `SrcAlpha, OneMinusSrcAlpha` (non-premultiplied), while OpenFL uses `One, OneMinusSrcAlpha` (premultiplied). Per-drawable opacity is applied as **alpha-only scaling** (`pixelColor.a *= u_opacity`) in Heaps, vs RGBA scaling (`gl_FragColor *= u_opacity`) in OpenFL. RGBA scaling in Heaps causes double-darkening during alpha transitions (e.g. pose changes).
+- **DCE full required** — The hxml uses `-dce full` (not `-dce no`) to eliminate `hxd.snd.Mp3Data` which has `@:hlNative("fmt","mp3_open")`. With `-dce no`, the installed `fmt.hdll` signature mismatch causes runtime crash.
+- **No breaking changes** — Existing OpenFL/Flixel backends, `L2DCore`, `ICubismBridge`, native code, and `haxelib.json` dependencies are unchanged. Heaps backend is opt-in via `-D heaps` and `-lib heaps` + `-lib hlsdl`.
+
+---
+
+### v0.7.0 — Heaps 引擎后端支持
+
+**一行描述：** 新增 Heaps 1.9.1 渲染后端，通过 `HeapsRenderer` + `L2DHeapsObject` + `CubismHeapsShader` 实现，让 Live2D 模型原生运行在 Heaps 游戏引擎上（HL 目标），无需依赖 OpenFL/Flixel。
+
+**完整描述：**
+
+本版本新增完整的 Heaps 后端，允许 live2d-haxe 通过 Heaps 的 `h2d` 场景图渲染 Live2D 模型。这让基于 Heaps 的 Haxe 项目（游戏、工具、编辑器）无需通过 OpenFL 桥接即可使用 Live2D。Heaps 后端仅支持 HL 目标（Heaps 不支持 hxcpp）。
+
+- **HeapsRenderer** — 新的 `IL2DRenderer` 实现，使用 `h2d.Object` 作为容器，`L2DMeshDrawable extends h2d.Drawable` 作为显示对象（8-float RawFormat 顶点：x, y, u, v, r, g, b, a），`h3d.mat.Texture` 作为纹理。全部 19 个 `IL2DRenderer` 方法已实现。纹理加载通过 `format.png.Reader`（纯 Haxe PNG 解码器，无 `fmt.hdll` 依赖）。
+- **L2DMeshDrawable** — `h2d.Drawable` 子类，封装 `MeshPrimitive extends h3d.prim.Primitive`。每帧：`updateMesh()` → `primitive.flush()`（通过 `Buffer.uploadVector` + `Indexes.upload` 重建 GPU 缓冲区）→ `ctx.beginDrawObject(this, texture)` → `primitive.render(engine)`（`engine.renderIndexed`）。注意：`h3d.prim.Primitive` 无公共构造函数，`MeshPrimitive.new()` 不调用 `super()`。
+- **CubismHeapsShader** — `hxsl.Shader` 子类（priority=200），处理遮罩采样、正片叠底/滤色混合和逐 drawable 透明度。`fragment()` 在 `Base2d.fragment()`（priority=100）之前运行，修改共享的 `pixelColor` 变量。开关 uniform：`u_useMask`、`u_useColor`、`u_opacity`。遮罩 UV 通过 `u_maskOffset` / `u_maskScale` 从 `absolutePosition.xy`（屏幕空间）计算。
+- **CubismMaskShader** — 纯色填充 `hxsl.Shader`，用于遮罩 RT 渲染。每个片段输出固定 `u_color`。由 `HeapsRenderer.renderMaskToBitmapData()` 使用，按 R/G/B 通道绘制遮罩形状（每个遮罩组一个通道，最多 3 组）。
+- **遮罩 RT** — `renderMaskToBitmapData()` 分配带 `[Target]` 标志的 `h3d.mat.Texture`，使用 `RenderContext.pushTarget(maskRT)` / `popTarget()` 离屏渲染遮罩形状。屏幕空间顶点通过减去 `offsetX`/`offsetY` 转换为 RT 局部坐标。Y 轴翻转由 `pushTarget` 的视图矩阵自动处理。
+- **L2DHeapsObject** — `h2d.Object` 子类，封装 `L2DCore` + `HeapsRenderer`。在 `sync(ctx)` 中通过 `hxd.Timer.dt` 自动更新和渲染 —— 添加到场景即可，无需手动调用 `update`/`render`。暴露对齐 Flixel 风格的便捷 API（`startMotion`、`setExpression`、`hitTest`、`setDragging`、`setBreathEnabled` 等）和 `core` 字段供高级访问。
+- **非预乘 Alpha** — 与 OpenFL 后端的关键差异：Heaps `BlendMode.Alpha` 使用 `SrcAlpha, OneMinusSrcAlpha`（非预乘），而 OpenFL 使用 `One, OneMinusSrcAlpha`（预乘）。逐 drawable 透明度在 Heaps 中以**仅 alpha 缩放**应用（`pixelColor.a *= u_opacity`），而 OpenFL 为 RGBA 缩放（`gl_FragColor *= u_opacity`）。在 Heaps 中使用 RGBA 缩放会导致 alpha 过渡时（如 pose 切换）双重变暗。
+- **DCE full 必需** — hxml 使用 `-dce full`（而非 `-dce no`）以消除 `hxd.snd.Mp3Data`（含 `@:hlNative("fmt","mp3_open")`）。使用 `-dce no` 时，已安装的 `fmt.hdll` 签名不匹配会导致运行时崩溃。
+- **无破坏性变更** — 现有 OpenFL/Flixel 后端、`L2DCore`、`ICubismBridge`、原生代码和 `haxelib.json` 依赖均不变。Heaps 后端通过 `-D heaps` 和 `-lib heaps` + `-lib hlsdl` 按需启用。
+
 ## [0.6.0] - 2026-07-06
 
 ### v0.6.0 — HashLink backend support

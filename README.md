@@ -6,7 +6,7 @@ Live2D Cubism SDK for Haxe - multi-backend rendering abstraction with CalcOnly a
 
 This library provides a standalone, reusable Live2D Cubism integration for Haxe projects. It uses a "CalcOnly" approach where the C++ side only handles parameter calculation (physics, motion, expressions, etc.) while the Haxe side handles all rendering through a pluggable backend interface.
 
-**Current targets:** Windows x64 (cpp + hl) | **Architecture:** Multi-backend (OpenFL/Flixel built-in, extensible to other frameworks)
+**Current targets:** Windows x64 (cpp + hl) | **Architecture:** Multi-backend (OpenFL/Flixel/Heaps built-in, extensible to other frameworks)
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed architecture docs and [BACKEND_GUIDE.md](./BACKEND_GUIDE.md) for adding new backends.
 
@@ -38,7 +38,8 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed architecture docs and [BAC
 │  IL2DRenderer  ·  ICubismBridge                     │
 ├─────────────────────────────────────────────────────┤
 │  Backend Implementations                             │
-│  OpenFLRenderer · HxcppWindowsBridge · HlWindowsBridge │
+│  OpenFLRenderer · HeapsRenderer · HxcppWindowsBridge│
+│                            · HlWindowsBridge         │
 └─────────────────────────────────────────────────────┘
          ↕ ICubismBridge (GetProcAddress/dlopen/...)
     live2d_capi.dll/.so/.dylib → Live2DCubismCore
@@ -47,7 +48,7 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed architecture docs and [BAC
 - **C++ Native Layer** (`live2d_capi.dll`): Flat C API wrapping the Cubism SDK. Only performs parameter/motion calculation, no OpenGL/DirectX rendering.
 - **Core Logic Layer** (`L2DCore`): Platform-independent batch building, mask grouping, vertex transformation, and render orchestration.
 - **Backend Interfaces** (`IL2DRenderer`, `ICubismBridge`): Contracts for rendering and native access, enabling multi-backend support.
-- **Backend Implementations**: `OpenFLRenderer` (drawTriangles), `HxcppWindowsBridge` (GetProcAddress, #if cpp), `HlWindowsBridge` (@:hlNative, #if hl). Adding a new backend only requires implementing these two interfaces.
+- **Backend Implementations**: `OpenFLRenderer` (drawTriangles, #if openfl), `HeapsRenderer` (h2d.Drawable + h3d.prim, #if heaps), `HxcppWindowsBridge` (GetProcAddress, #if cpp), `HlWindowsBridge` (@:hlNative, #if hl). Adding a new backend only requires implementing these two interfaces.
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for full details and [BACKEND_GUIDE.md](./BACKEND_GUIDE.md) for adding new backends.
 
@@ -68,6 +69,11 @@ For the Flixel/OpenFL backend (default):
 - Lime 8.0.1+
 - OpenFL 9.2.1+
 - Flixel 4.11.0+
+
+For the Heaps backend (optional, HL target only):
+- Heaps 1.9.1+
+- hlsdl 1.13.0+ (provides SDL window driver for HL)
+- HashLink 1.13+ (JIT runtime, `hl` executable on PATH)
 
 ## Step 1: Download the Cubism SDK
 
@@ -396,6 +402,147 @@ import live2d.cubism.L2DManager;          // ✅ Alias for L2DFlixelManager
 import live2d.cubism.L2DModel;            // ✅ Alias for core.L2DModel
 ```
 
+## Usage (Heaps Backend)
+
+The Heaps backend (`#if heaps`) runs on the HL target only. It uses `h2d.Object` as the scene graph node and `h3d.mat.Texture` for textures, with a unified `hxsl.Shader` for mask/color/opacity.
+
+### hxml configuration
+
+```hxml
+-cp .
+-lib heaps
+-lib hlsdl
+-lib live2d-haxe
+-D heaps
+-D live2d_haxe
+-dce full
+-main MyHeapsApp
+-hl bin/heaps/app.hl
+```
+
+> `-dce full` is required to eliminate `hxd.snd.Mp3Data` (which has `@:hlNative("fmt","mp3_open")` and would otherwise trigger a `fmt.hdll` signature mismatch at runtime).
+
+### Basic: Single Model with L2DHeapsObject
+
+```haxe
+import live2d.cubism.heaps.L2DHeapsObject;
+
+class MyHeapsApp extends hxd.App
+{
+    var l2d:L2DHeapsObject;
+
+    override function init()
+    {
+        // Load a Live2D model and attach to s2d
+        l2d = new L2DHeapsObject('assets/live2d/Haru/', 'Haru.model3.json', s2d);
+
+        // Position and scale (via core — see transform note below)
+        l2d.core.x = s2d.width / 2;
+        l2d.core.y = s2d.height / 2;
+        l2d.core.scale = (s2d.height * 0.8) / l2d.modelHeight;
+
+        // Play idle motion
+        l2d.startIdleMotion();
+    }
+
+    override function update(dt:Float)
+    {
+        // No need to call l2d.core.update() or l2d.core.render() —
+        // L2DHeapsObject auto-updates and renders in sync(ctx).
+
+        // Interaction (example: eye tracking on mouse hold)
+        if (hxd.Key.isDown(hxd.Key.MOUSE_LEFT))
+        {
+            l2d.setDragging(s2d.mouseX, s2d.mouseY);
+        }
+        else
+        {
+            l2d.setDragging(l2d.core.x, l2d.core.y);
+        }
+    }
+}
+```
+
+### Transform Note
+
+`L2DHeapsObject` extends `h2d.Object`, which already has `x`, `y`, `alpha` fields and a `scale(v)` method (multiplicative scaling). To avoid double-transform (L2DCore applies `core.x/y/scale` in vertex computation, and the container would inherit `h2d.Object`'s transform), the object keeps its own `x`, `y`, `scaleX`, `scaleY`, `alpha` at identity (0/0/1/1/1).
+
+- **Position**: set `l2d.core.x`, `l2d.core.y` (screen-space coordinates)
+- **Scale**: set `l2d.core.scale` — do NOT use `scaleX`/`scaleY` or `scale(v)` method
+- **Opacity**: set `l2d.core.alpha` (h2d.Object's `alpha` field cannot be overridden)
+- **Advanced access**: `l2d.core` is public for direct access to all `L2DCore` fields and methods
+
+### Playing Motions and Expressions
+
+```haxe
+// Play a motion (same API as Flixel backend)
+var handle = l2d.startMotion('TapBody', 0, 3);
+
+// Play a random Idle motion
+l2d.startIdleMotion();
+
+// Set an expression
+l2d.setExpression('smile');
+
+// Set a random expression
+l2d.setRandomExpression();
+```
+
+### Interactive: Hit Test and Dragging
+
+```haxe
+// Check if mouse click hits a specific area
+if (hxd.Key.isPressed(hxd.Key.MOUSE_LEFT))
+{
+    var mx = s2d.mouseX;
+    var my = s2d.mouseY;
+
+    if (l2d.hitTest('Body', mx, my))
+    {
+        l2d.startMotion('TapBody', 0, 3);
+    }
+}
+
+// Follow mouse with eyes/head
+if (hxd.Key.isDown(hxd.Key.MOUSE_LEFT))
+{
+    l2d.setDragging(s2d.mouseX, s2d.mouseY);
+}
+```
+
+### Framework Behavior Control
+
+Same API as the Flixel backend — all 7 behavior modules can be toggled at runtime:
+
+```haxe
+l2d.setBreathEnabled(false);       // Disable breathing animation
+l2d.setPhysicsEnabled(false);      // Disable physics simulation
+l2d.setEyeBlinkEnabled(false);     // Disable auto-blinking
+l2d.setExpressionEnabled(false);   // Disable expression updates
+l2d.setLookEnabled(false);         // Disable look/gaze tracking
+l2d.setLipSyncEnabled(false);      // Disable lip sync
+l2d.setPoseEnabled(false);         // Disable pose transitions
+
+// External lip sync (microphone/audio RMS → mouth open amount)
+l2d.setLipSyncValue(0.5);          // 0.0~1.0 mouth openness
+l2d.setLipSyncValue(-1.0);         // <0 reverts to wav file handler mode
+```
+
+### Running the Demo
+
+The `test/HeapsDemo.hx` demo shows full interaction (model switching, hit test, eye tracking, scale wheel, behavior toggles). From the `test/` directory:
+
+```bash
+# Compile
+haxe heaps_demo.hxml
+
+# Copy native DLLs/HDLLs to output directory
+.\copy_heaps.bat
+
+# Run
+hl bin/heaps/heaps_demo.hl
+```
+
 ## API Reference
 
 ### L2DFlixelComponent (extends FlxBasic)
@@ -416,6 +563,34 @@ import live2d.cubism.L2DModel;            // ✅ Alias for core.L2DModel
 | `getSprite()` | Get OpenFL Sprite container |
 | `render()` | Redraw all visible drawables |
 | `getCanvasWidth()`, `getCanvasHeight()` | Model canvas dimensions |
+
+### L2DHeapsObject (extends h2d.Object, #if heaps)
+
+Auto-updates and renders in `sync(ctx)` — no manual `update`/`render` calls needed.
+
+| Property/Method | Description |
+| --- | --- |
+| `core` | Underlying `L2DCore` (public, for x/y/scale/alpha/advanced access) |
+| `model` | Underlying `L2DModel` handle |
+| `modelWidth`, `modelHeight` | Computed model bounds |
+| `modelDir`, `modelFileName` | Model path info |
+| `startMotion(group, no, priority)` | Play a motion |
+| `startIdleMotion()` | Play random Idle motion |
+| `setExpression(id)` | Set expression by ID |
+| `setRandomExpression()` | Set random expression |
+| `hitTest(areaName, px, py)` | Hit test at screen coordinates |
+| `setDragging(screenX, screenY)` | Set drag/follow target |
+| `getCanvasWidth()`, `getCanvasHeight()` | Model canvas dimensions |
+| `setBreathEnabled(b)` | Toggle breathing animation |
+| `setEyeBlinkEnabled(b)` | Toggle auto-blink |
+| `setExpressionEnabled(b)` | Toggle expression updates |
+| `setLookEnabled(b)` | Toggle look/gaze tracking |
+| `setPhysicsEnabled(b)` | Toggle physics simulation |
+| `setLipSyncEnabled(b)` | Toggle lip sync |
+| `setPoseEnabled(b)` | Toggle pose transitions |
+| `setLipSyncValue(v)` | Set external lip sync value (0~1, <0 reverts to wav mode) |
+
+> **Transform**: Set `l2d.core.x`, `l2d.core.y` for screen position, `l2d.core.scale` for scale, and `l2d.core.alpha` for opacity. `h2d.Object`'s own `x`/`y`/`scaleX`/`scaleY`/`alpha` are kept at identity to avoid double-transform. Do NOT use `scaleX`/`scaleY` or `scale(v)` method. See [Usage (Heaps Backend) → Transform Note](#transform-note).
 
 ### L2DFlixelManager (static)
 
@@ -527,9 +702,14 @@ cmake .. -DCUBISM_ROOT="D:/SDK/CubismSdkForNative-5-r.5" -A x64
 
 - **Windows x64 only** (current bridges) - `HxcppWindowsBridge` (#if cpp) uses Windows-specific `GetProcAddress`/`LoadLibraryA`. `HlWindowsBridge` (#if hl) uses `@:hlNative` bindings to a .hdll shim that internally calls `LoadLibraryA`. Linux/macOS support requires new bridge implementations using `dlopen`/`dlsym`.
 - **CalcOnly rendering** - C++ side does no GPU rendering; all drawing is via the rendering backend (e.g., OpenFL's `drawTriangles` with GPU acceleration).
-- **GPU Shader path** (default) — Mask, Multiply/Screen color, and opacity handled by `CubismRendererShader` fragment shader. All drawables are batchable regardless of color/opacity. Batch key = (texture, blendMode, maskGroup, mulColor, scrColor, opacity). Automatic fallback to `Sprite.mask` when shader unsupported or model has >3 mask groups.
-- **Batched rendering** — Drawables sharing the same state are merged into one draw call. Typical models: ~18 batches from ~130 individual draw calls. Sprite pooling (32 batch + 16 mask) avoids per-frame allocation.
-- **Mask groups** — Up to 3 mask groups supported in GPU shader path (RGB channel packing). Models with >3 groups fall back to `Sprite.mask`.
+- **GPU Shader path** (Flixel/OpenFL backend, default) — Mask, Multiply/Screen color, and opacity handled by `CubismRendererShader` fragment shader. All drawables are batchable regardless of color/opacity. Batch key = (texture, blendMode, maskGroup, mulColor, scrColor, opacity). Automatic fallback to `Sprite.mask` when shader unsupported or model has >3 mask groups.
+- **Batched rendering** (Flixel/OpenFL backend) — Drawables sharing the same state are merged into one draw call. Typical models: ~18 batches from ~130 individual draw call. Sprite pooling (32 batch + 16 mask) avoids per-frame allocation.
+- **Mask groups** (Flixel/OpenFL backend) — Up to 3 mask groups supported in GPU shader path (RGB channel packing). Models with >3 groups fall back to `Sprite.mask`.
+- **Heaps backend — HL target only** — The Heaps backend (`#if heaps`) runs only on HashLink/HL. It does not support the cpp target (no `HxcppWindowsBridge` integration for Heaps). Use the Flixel/OpenFL backend for cpp deployments.
+- **Heaps backend — Shader path only** — `HeapsRenderer` always uses `CubismHeapsShader` (hxsl, priority=200) for mask/color/opacity. There is no fallback path; if the shader fails to compile the model will not render. Mask is implemented via a render-target texture (`CubismMaskShader` fills solid color, sampled by `CubismHeapsShader`).
+- **Heaps backend — Non-premultiplied alpha** — Heaps' `BlendMode.Alpha` is `SrcAlpha * Src + (1 - SrcAlpha) * Dst` (non-premultiplied), unlike OpenFL's premultiplied alpha. `CubismHeapsShader` applies opacity as `pixelColor.a *= u_opacity` (alpha-only scaling, NOT RGB) to avoid white highlighting during fade-out animations.
+- **Heaps backend — `-dce full` required** — Required to eliminate `hxd.snd.Mp3Data` (which has `@:hlNative("fmt","mp3_open")` and would otherwise trigger a `fmt.hdll` signature mismatch at runtime).
+- **Heaps backend — Transform via `core`** — `L2DHeapsObject` keeps `h2d.Object`'s own `x`/`y`/`scaleX`/`scaleY`/`alpha` at identity to avoid double-transform. Position, scale, and opacity must be set via `l2d.core.x`, `l2d.core.y`, `l2d.core.scale`, and `l2d.core.alpha`. Do NOT use `scaleX`/`scaleY` or `scale(v)` method.
 
 ## License
 

@@ -231,15 +231,31 @@ class L2DYourFrameworkObject extends YourFrameworkBaseClass
 #end
 ```
 
-## Reference Implementation
+## Reference Implementations
 
-The `OpenFLRenderer` in `live2d.cubism.backend.openfl` is the reference implementation. Key aspects:
+### OpenFLRenderer (live2d.cubism.backend.openfl)
+
+The `OpenFLRenderer` is the primary reference implementation. Key aspects:
 
 - **GPU Shader path**: `CubismRendererShader` (extends `GraphicsShader`) handles mask sampling, Multiply/Screen color blending, and per-drawable opacity via fragment shader uniforms. Uses `@:glFragmentBody` for custom GLSL injection.
 - **Texture injection**: Constructor accepts `textureLoader`, `textureDestroyer`, and `textureToBitmapData` functions, allowing the same renderer to work with both plain `BitmapData` and Flixel's `FlxGraphic`
 - **Array to Vector conversion**: `Vector.ofArray()` converts Haxe `Array<Float>` to OpenFL `Vector<Float>` for `drawTriangles()`
 - **Blend mode mapping**: Simple switch statement mapping Live2D values to `openfl.display.BlendMode` enum
 - **Automatic fallback**: `supportsShaderMask()` returns `true`; users can set `useShaderMask = false` to force fallback to `Sprite.mask` + `ColorTransform`
+- **Premultiplied alpha**: OpenFL uses premultiplied alpha blending (`One, OneMinusSrcAlpha`). Per-drawable opacity is applied as RGBA scaling: `gl_FragColor *= u_opacity`.
+
+### HeapsRenderer (live2d.cubism.backend.heaps)
+
+The `HeapsRenderer` is the second reference implementation (v0.7.0+, HL target only). Key aspects:
+
+- **GPU Shader path**: `CubismHeapsShader` (extends `hxsl.Shader`, priority=200) runs its `fragment()` before `Base2d.fragment()` (priority=100), modifying the shared `pixelColor` variable. Base2d then writes `output.color = pixelColor`. Mask, Multiply/Screen color, and per-drawable opacity are toggled by uniforms (`u_useMask`, `u_useColor`, `u_opacity`).
+- **Mesh rendering**: `L2DMeshDrawable` extends `h2d.Drawable` and wraps a `MeshPrimitive` (extends `h3d.prim.Primitive`) with 8-float RawFormat vertices (x, y, u, v, r, g, b, a). Each frame: `updateMesh()` → `primitive.flush()` (reallocate GPU buffers) → `ctx.beginDrawObject(this, texture)` → `primitive.render(engine)`.
+- **Texture loading**: Uses `format.png.Reader` (pure Haxe PNG decoder, no `fmt.hdll` dependency) → `h3d.mat.Texture.fromPixels` with `Filter.Linear`.
+- **Mask RT**: `renderMaskToBitmapData()` allocates a `h3d.mat.Texture` with `[Target]` flag, then uses `RenderContext.pushTarget(maskRT)` / `popTarget()` to render mask shapes. A dedicated `maskDrawable` (not in the scene graph) with `CubismMaskShader` (solid-color fill) renders each mask group in its assigned RGB channel (R/G/B for groups 0/1/2). Vertices are converted from screen space to RT-local by subtracting `offsetX`/`offsetY`; the Y-axis flip is handled automatically by `pushTarget`'s view matrix (`viewD = 2/height`, positive).
+- **Blend mode difference (critical)**: Heaps `BlendMode.Alpha` uses **non-premultiplied** alpha blending (`SrcAlpha, OneMinusSrcAlpha`), unlike OpenFL's premultiplied (`One, OneMinusSrcAlpha`). Per-drawable opacity must be applied as **alpha-only scaling** (`pixelColor.a *= u_opacity`), NOT RGBA scaling. RGBA scaling would cause double-darkening during blend because the blend stage multiplies by `SrcAlpha` again. Same logic applies to mask: `pixelColor.a *= maskVal` (not `pixelColor.rgb *= maskVal`).
+- **hxsl priority sorting**: Shaders are sorted by priority descending (`haxe.ds.ArraySort.sort(shaderDatas, function(s1, s2) return s2.p - s1.p)`). Higher priority executes first. `CubismHeapsShader` uses priority=200 to run before `Base2d` (priority=100), so it can modify `pixelColor` before `Base2d` writes it to `output.color`.
+- **u_maskTexture always bound**: The `@param var u_maskTexture : Sampler2D` requires a valid texture binding even when `u_useMask=0`. A 1x1 white texture (`Texture.fromColor(0xFFFFFFFF)`) is bound as default in `createDisplayObject`, both branches of `drawShaderTexturedTriangles`, and `drawTexturedTriangles`.
+- **No fallback path**: `supportsShaderMask()` returns `true`; the non-shader path (`drawTexturedTriangles`) still works but `setMask`/`clearMask`/`drawSolidTriangles` are stubbed (shader path only). The `useShaderMask=false` fallback to `Sprite.mask` equivalent is not implemented in v0.7.0.
 
 ## Performance Notes
 
