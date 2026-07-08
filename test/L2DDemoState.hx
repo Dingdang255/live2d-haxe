@@ -10,6 +10,7 @@ import live2d.cubism.L2DCore;
 import live2d.cubism.ext.L2DEventDispatcher;
 import live2d.cubism.ext.L2DLookAt;
 import live2d.cubism.ext.L2DMotionQueue;
+import live2d.cubism.ext.L2DParts;
 
 // Compile-time model constants — sub-types of the ModelConstants module.
 import ModelConstants.HaruModelConstants;
@@ -20,7 +21,7 @@ import ModelConstants.NatoriModelConstants;
 import ModelConstants.RiceModelConstants;
 
 /**
- * Demo state showing Live2D Cubism usage with Flixel + v0.8 Extension Layer.
+ * Demo state showing Live2D Cubism usage with Flixel + v0.9 Extension Layer.
  *
  * Controls:
  *   - Click on model hit areas to trigger motions
@@ -31,7 +32,7 @@ import ModelConstants.RiceModelConstants;
  *   - M: Play motion
  *   - B: Toggle breath
  *   - P: Toggle physics
- *   - L: Toggle lip sync
+ *   - T: Toggle first part opacity (L2DParts chain DSL demo)
  *   - LEFT/RIGHT: Switch model
  */
 class L2DDemoState extends FlxState
@@ -48,6 +49,8 @@ class L2DDemoState extends FlxState
     var dispatcher:L2DEventDispatcher;
     var motionQueue:L2DMotionQueue;
     var lookAt:L2DLookAt;
+    /** Parts manager (L2DParts chain DSL + tween). */
+    var parts:L2DParts;
 
     /** Hit area names for the current model (from compile-time constants). */
     var currentHitAreas:Array<String> = [];
@@ -62,15 +65,16 @@ class L2DDemoState extends FlxState
 
         // Info text
         infoText = new FlxText(10, 10, FlxG.width - 20,
-            'Live2D Haxe Demo v0.8\n'
+            'Live2D Haxe Demo v0.9\n'
             + 'Click: Hit test + motion\n'
             + 'Hold mouse: Eye tracking\n'
             + 'Ctrl + drag: Move model\n'
             + 'Wheel: Scale (Shift=fast)\n'
             + 'E: Expression | M: Motion\n'
-            + 'B: Breath | P: Physics | L: LipSync\n'
+            + 'B: Breath | P: Physics\n'
+            + 'T: Toggle first part (L2DParts)\n'
             + 'LEFT/RIGHT: Switch model\n'
-            + 'Extensions: MotionQueue + LookAt + EventDispatcher'
+            + 'Extensions: MotionQueue + LookAt + EventDispatcher + Parts + UserData'
         );
         infoText.setFormat(null, 14, 0xFFFFFFFF);
         add(infoText);
@@ -102,7 +106,7 @@ class L2DDemoState extends FlxState
             l2d.scale = (FlxG.height * 0.8) / l2d.modelHeight;
 
             FlxG.addChildBelowMouse(l2d.getSprite());
-            l2d.startIdleMotion();
+            l2d.core.startIdleMotion();
 
             // Recreate extensions bound to the new core
             dispatcher = new L2DEventDispatcher(l2d.core);
@@ -113,6 +117,7 @@ class L2DDemoState extends FlxState
             // "can't start motion" warnings. motionQueue is used only for
             // sequencing user-triggered motions (e.g. TapBody).
             lookAt = new L2DLookAt(l2d.core);
+            parts = new L2DParts(l2d.core);
 
             dispatcher.onMotionFinished((group, no, handle) -> {
                 trace('[FlixelDemo] Motion finished: $group#$no');
@@ -120,6 +125,25 @@ class L2DDemoState extends FlxState
             dispatcher.onHitTest((area, x, y) -> {
                 trace('[FlixelDemo] Hit: $area @ ($x, $y)');
             });
+
+            // Motion UserData events: fired when a motion timeline emits a
+            // UserData string (e.g. voice/sound trigger). Both subscription
+            // channels are shown:
+            //   - dynamic `onMotionUserDataEvent` callback (set once)
+            //   - typed `onMotionUserData` subscription (token-based)
+            dispatcher.onMotionUserDataEvent = (value) -> {
+                trace('[FlixelDemo] UserData (dynamic): $value');
+            };
+            dispatcher.onMotionUserData((value) -> {
+                trace('[FlixelDemo] UserData (typed): $value');
+            });
+
+            // Print all part names once on load (L2DParts introspection demo)
+            if (parts.count > 0)
+            {
+                var names = [for (i in 0...parts.count) parts.at(i).name];
+                trace('[FlixelDemo] Parts (${parts.count}): ${names.join(", ")}');
+            }
 
             // Select compile-time constants for the current model.
             // Each *ModelConstants class is @:build-generated from the model's
@@ -233,7 +257,7 @@ class L2DDemoState extends FlxState
         #if FLX_KEYBOARD
         if (FlxG.keys.justPressed.E)
         {
-            l2d.setRandomExpression();
+            l2d.core.setRandomExpression();
         }
         if (FlxG.keys.justPressed.M)
         {
@@ -253,18 +277,24 @@ class L2DDemoState extends FlxState
             l2d.core.setPhysicsEnabled(!l2d.core.physicsEnabled);
             statusText.text = 'Physics: ${l2d.core.physicsEnabled}';
         }
-        if (FlxG.keys.justPressed.L)
+        if (FlxG.keys.justPressed.T)
         {
-            l2d.core.setLipSyncEnabled(!l2d.core.lipSyncEnabled);
-            statusText.text = 'LipSync: ${l2d.core.lipSyncEnabled}';
+            // L2DParts chain DSL demo: toggle first part with a short tween.
+            if (parts != null && parts.count > 0)
+            {
+                var p = parts.at(0);
+                parts.tween(p.name, p.get() > 0.5 ? 0.0 : 1.0, 0.3);
+                statusText.text = 'Part "${p.name}" → ${p.get() > 0.5 ? "hide" : "show"}';
+            }
         }
         #end
 
         // Update extensions BEFORE native update so setDragging/StartMotion land
         // before core.update(dt) reads them. Order: motionQueue polls completion
-        // (may start pending motions) → lookAt writes setDragging → native update.
+        // + UserData events → lookAt writes setDragging → parts tween → native update.
         if (motionQueue != null) motionQueue.update(elapsed);
         if (lookAt != null) lookAt.update(elapsed);
+        if (parts != null) parts.update(elapsed);
 
         // Update and render
         L2DFlixelManager.updateAll(elapsed);

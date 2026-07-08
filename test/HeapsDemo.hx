@@ -10,6 +10,7 @@ import hxd.res.DefaultFont;
 import live2d.cubism.ext.L2DEventDispatcher;
 import live2d.cubism.ext.L2DLookAt;
 import live2d.cubism.ext.L2DMotionQueue;
+import live2d.cubism.ext.L2DParts;
 import live2d.cubism.ext.heaps.L2DHeapsInputAdapter;
 import live2d.cubism.heaps.L2DHeapsObject;
 
@@ -36,6 +37,7 @@ import ModelConstants.RiceModelConstants;
  *   E: random expression
  *   M: play TapBody motion
  *   B / P / L: toggle Breath / Physics / LipSync
+ *   T: toggle first part opacity (L2DParts chain DSL demo)
  *   LEFT / RIGHT: switch model
  */
 class HeapsDemo extends App
@@ -55,6 +57,8 @@ class HeapsDemo extends App
     var dispatcher:L2DEventDispatcher;
     var motionQueue:L2DMotionQueue;
     var lookAt:L2DLookAt;
+    /** Parts manager (L2DParts chain DSL + tween). */
+    var parts:L2DParts;
 
     /** Event-based mouse input adapter (demonstrates IL2DInputAdapter). */
     var input:L2DHeapsInputAdapter;
@@ -86,15 +90,16 @@ class HeapsDemo extends App
         infoText.textColor = 0xFFFFFFFF;
         infoText.x = 8;
         infoText.y = 8;
-        infoText.text = 'Live2D Haxe - Heaps Demo v0.8\n'
+        infoText.text = 'Live2D Haxe - Heaps Demo v0.9\n'
             + 'Click: Hit test + motion\n'
             + 'Hold mouse: Eye tracking\n'
             + 'Ctrl + drag: Move model\n'
             + 'Wheel: Scale (Shift=fast)\n'
             + 'E: Expression | M: Motion\n'
             + 'B: Breath | P: Physics | L: LipSync\n'
+            + 'T: Toggle first part (L2DParts)\n'
             + 'LEFT/RIGHT: Switch model\n'
-            + 'Extensions: MotionQueue + LookAt + EventDispatcher + InputAdapter';
+            + 'Extensions: MotionQueue + LookAt + EventDispatcher + InputAdapter + Parts + UserData';
 
         statusText = new Text(font, s2d);
         statusText.textColor = 0xFFCCCCCC;
@@ -161,7 +166,7 @@ class HeapsDemo extends App
             l2d.core.x = s2d.width / 2;
             l2d.core.y = s2d.height / 2;
             l2d.core.scale = (s2d.height * 0.8) / l2d.modelHeight;
-            l2d.startIdleMotion();
+            l2d.core.startIdleMotion();
 
             // Recreate extensions bound to the new core
             dispatcher = new L2DEventDispatcher(l2d.core);
@@ -172,6 +177,7 @@ class HeapsDemo extends App
             // "can't start motion" warnings. motionQueue is used only for
             // sequencing user-triggered motions (e.g. TapBody).
             lookAt = new L2DLookAt(l2d.core);
+            parts = new L2DParts(l2d.core);
 
             dispatcher.onMotionFinished((group, no, handle) -> {
                 trace('[HeapsDemo] Motion finished: $group#$no');
@@ -179,6 +185,25 @@ class HeapsDemo extends App
             dispatcher.onHitTest((area, x, y) -> {
                 trace('[HeapsDemo] Hit: $area @ ($x, $y)');
             });
+
+            // Motion UserData events: fired when a motion timeline emits a
+            // UserData string (e.g. voice/sound trigger). Both subscription
+            // channels are shown:
+            //   - dynamic `onMotionUserDataEvent` callback (set once)
+            //   - typed `onMotionUserData` subscription (token-based)
+            dispatcher.onMotionUserDataEvent = (value) -> {
+                trace('[HeapsDemo] UserData (dynamic): $value');
+            };
+            dispatcher.onMotionUserData((value) -> {
+                trace('[HeapsDemo] UserData (typed): $value');
+            });
+
+            // Print all part names once on load (L2DParts introspection demo)
+            if (parts.count > 0)
+            {
+                var names = [for (i in 0...parts.count) parts.at(i).name];
+                trace('[HeapsDemo] Parts (${parts.count}): ${names.join(", ")}');
+            }
 
             // Select compile-time constants for the current model.
             // Each *ModelConstants class is @:build-generated from the model's
@@ -282,7 +307,7 @@ class HeapsDemo extends App
         // Keyboard actions
         if (Key.isPressed(Key.E))
         {
-            l2d.setRandomExpression();
+            l2d.core.setRandomExpression();
             updateStatus('Expression: random');
         }
         if (Key.isPressed(Key.M))
@@ -294,23 +319,34 @@ class HeapsDemo extends App
         }
         if (Key.isPressed(Key.B))
         {
-            l2d.setBreathEnabled(!l2d.core.breathEnabled);
+            l2d.core.setBreathEnabled(!l2d.core.breathEnabled);
             updateStatus('Breath: ${l2d.core.breathEnabled}');
         }
         if (Key.isPressed(Key.P))
         {
-            l2d.setPhysicsEnabled(!l2d.core.physicsEnabled);
+            l2d.core.setPhysicsEnabled(!l2d.core.physicsEnabled);
             updateStatus('Physics: ${l2d.core.physicsEnabled}');
         }
         if (Key.isPressed(Key.L))
         {
-            l2d.setLipSyncEnabled(!l2d.core.lipSyncEnabled);
+            l2d.core.setLipSyncEnabled(!l2d.core.lipSyncEnabled);
             updateStatus('LipSync: ${l2d.core.lipSyncEnabled}');
         }
+        if (Key.isPressed(Key.T))
+        {
+            // L2DParts chain DSL demo: toggle first part with a short tween.
+            if (parts != null && parts.count > 0)
+            {
+                var p = parts.at(0);
+                parts.tween(p.name, p.get() > 0.5 ? 0.0 : 1.0, 0.3);
+                updateStatus('Part "${p.name}" → ${p.get() > 0.5 ? "hide" : "show"}');
+            }
+        }
 
-        // Update extensions (order: motionQueue polls completion → lookAt writes setDragging)
+        // Update extensions (order: motionQueue polls completion + UserData events → lookAt writes setDragging → parts tween)
         if (motionQueue != null) motionQueue.update(dt);
         if (lookAt != null) lookAt.update(dt);
+        if (parts != null) parts.update(dt);
     }
 
     override function onResize()

@@ -67,6 +67,14 @@ struct L2DFunctions {
     unsigned int (*get_core_version)();
     unsigned int (*get_latest_moc_version)();
     bool  (*has_moc_consistency)(const char*);
+    int   (*poll_motion_events)(void*, char*, int);
+    void  (*clear_motion_events)(void*);
+    int   (*get_part_count)(void*);
+    int   (*find_part_index)(void*, const char*);
+    void  (*get_part_id)(void*, int, char*, int);
+    float (*get_part_opacity)(void*, int);
+    void  (*set_part_opacity)(void*, int, float);
+    void  (*reset_pose)(void*);
     bool loaded;
 };
 
@@ -137,6 +145,14 @@ HL_PRIM void HL_NAME(init)() {
     L2D_LOAD(get_core_version);
     L2D_LOAD(get_latest_moc_version);
     L2D_LOAD(has_moc_consistency);
+    L2D_LOAD(poll_motion_events);
+    L2D_LOAD(clear_motion_events);
+    L2D_LOAD(get_part_count);
+    L2D_LOAD(find_part_index);
+    L2D_LOAD(get_part_id);
+    L2D_LOAD(get_part_opacity);
+    L2D_LOAD(set_part_opacity);
+    L2D_LOAD(reset_pose);
     #undef L2D_LOAD
     l2dFn.loaded = true;
 }
@@ -453,3 +469,55 @@ HL_PRIM bool HL_NAME(has_moc_consistency)(vbyte* path) {
     return l2dFn.has_moc_consistency ? l2dFn.has_moc_consistency((const char*)path) : false;
 }
 DEFINE_PRIM(_BOOL, has_moc_consistency, _BYTES);
+
+// ============================================================
+// Motion Event Polling
+// ============================================================
+
+HL_PRIM int HL_NAME(poll_motion_events)(int64_t model, vbyte* out, int len) {
+    return l2dFn.poll_motion_events ? l2dFn.poll_motion_events(M(model), (char*)out, len) : 0;
+}
+DEFINE_PRIM(_I32, poll_motion_events, _I64 _BYTES _I32);
+
+HL_PRIM void HL_NAME(clear_motion_events)(int64_t model) {
+    if (l2dFn.clear_motion_events) l2dFn.clear_motion_events(M(model));
+}
+DEFINE_PRIM(_VOID, clear_motion_events, _I64);
+
+// ============================================================
+// Parts API
+// ============================================================
+
+HL_PRIM int HL_NAME(get_part_count)(int64_t model) {
+    return l2dFn.get_part_count ? l2dFn.get_part_count(M(model)) : 0;
+}
+DEFINE_PRIM(_I32, get_part_count, _I64);
+
+HL_PRIM int HL_NAME(find_part_index)(int64_t model, vbyte* name) {
+    return l2dFn.find_part_index ? l2dFn.find_part_index(M(model), (const char*)name) : -1;
+}
+DEFINE_PRIM(_I32, find_part_index, _I64 _BYTES);
+
+HL_PRIM void HL_NAME(get_part_id)(int64_t model, int idx, vbyte* out, int len) {
+    if (l2dFn.get_part_id) l2dFn.get_part_id(M(model), idx, (char*)out, len);
+}
+DEFINE_PRIM(_VOID, get_part_id, _I64 _I32 _BYTES _I32);
+
+HL_PRIM double HL_NAME(get_part_opacity)(int64_t model, int idx) {
+    return l2dFn.get_part_opacity ? (double)l2dFn.get_part_opacity(M(model), idx) : 0.0;
+}
+DEFINE_PRIM(_F64, get_part_opacity, _I64 _I32);
+
+HL_PRIM void HL_NAME(set_part_opacity)(int64_t model, int idx, double opacity) {
+    if (l2dFn.set_part_opacity) l2dFn.set_part_opacity(M(model), idx, (float)opacity);
+}
+DEFINE_PRIM(_VOID, set_part_opacity, _I64 _I32 _F64);
+
+// ============================================================
+// Pose Reset
+// ============================================================
+
+HL_PRIM void HL_NAME(reset_pose)(int64_t model) {
+    if (l2dFn.reset_pose) l2dFn.reset_pose(M(model));
+}
+DEFINE_PRIM(_VOID, reset_pose, _I64);

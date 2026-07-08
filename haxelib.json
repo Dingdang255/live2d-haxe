@@ -4,9 +4,10 @@
   "license": "MIT",
   "tags": ["live2d", "cubism", "openfl", "flixel", "heaps", "cpp", "hl", "native", "multi-backend"],
   "description": "Live2D Cubism SDK for Haxe - GPU shader rendering with multi-backend abstraction (cpp + hl, OpenFL/Flixel/Heaps)",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "classPath": "src",
-  "releasenote": "v0.8.0: Extension Layer — 5 cross-backend extensions (L2DMotionQueue, L2DLookAt, L2DLipSync, L2DEventDispatcher, L2DModelConstants macro) + IL2DAudioSource/IL2DInputAdapter interfaces + 3 backend InputAdapters (OpenFL/Flixel/Heaps). Zero native changes, all backends supported. No breaking changes to existing APIs.",
+  "main": "live2d.CLI",
+  "releasenote": "v0.9.0: Major update — Motion UserData events (native→Haxe callback + polling), L2DParts chain DSL + tween, FlxL2DGroup multi-model aggregation, L2DWavFileAudioSource (pure Haxe WAV decode + RMS), L2DDebugOverlay (Heaps+OpenFL), haxelib run CLI (--gen-constants/--gen-asset-list/--validate). Breaking: removed convenience delegates from L2DHeapsObject/L2DFlixelComponent (use .core.xxx()).",
   "contributors": ["Dingdang255"],
   "dependencies": {
     "hxcpp": "4.2.1"

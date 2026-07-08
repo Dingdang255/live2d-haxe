@@ -11,9 +11,16 @@ import live2d.cubism.L2DCore;
  * value is written to `L2DCore.setLipSyncValue`.
  *
  * While enabled, this class takes over lip sync from the C-side wav
- * file handler: `enable()` calls `core.setLipSyncEnabled(false)` to
- * avoid double-driving the mouth parameter. `disable()` restores the
- * wav mode by passing a negative value to `setLipSyncValue`.
+ * file handler: `enable()` switches to external mode by calling
+ * `core.setLipSyncValue(0.0)` (which sets `_useExternalLipSync = true`
+ * in native code). `disable()` reverts to wav mode by passing a
+ * negative value to `setLipSyncValue`.
+ *
+ * NOTE: `enable()` does NOT call `setLipSyncEnabled(false)` — that would
+ * disable the entire lip sync block in native `Update()`, preventing
+ * the external value from being applied. The native code checks
+ * `_lipSyncEnabled` first, then `_useExternalLipSync` to decide whether
+ * to use the external value or the wav file handler.
  *
  * Usage:
  * ```haxe
@@ -64,6 +71,19 @@ class L2DLipSync
     /** Maximum mouth open value. Default 1.0. */
     public var maxValue:Float = 1.0;
 
+    /**
+     * Optional callback to check if a motion with mouth keyframes is
+     * currently playing. When set and returns `true`, `update()` skips
+     * applying the external lip sync value, letting the motion's own
+     * mouth parameter keyframes take priority.
+     *
+     * Example: sync with `L2DMotionQueue`:
+     * ```haxe
+     * lipSync.motionActiveProvider = () -> motionQueue.current != null;
+     * ```
+     */
+    public var motionActiveProvider:Null<Void -> Bool> = null;
+
     public function new(core:L2DCore, source:IL2DAudioSource)
     {
         this.core = core;
@@ -72,25 +92,27 @@ class L2DLipSync
 
     /**
      * Enable this controller.
-     * Turns off the C-side wav file lip sync to avoid conflict, then
-     * begins driving `setLipSyncValue` from `update(dt)`.
+     * Switches native lip sync to external mode (via `setLipSyncValue(0.0)`)
+     * so that `update(dt)` can drive the mouth parameter each frame.
+     * Does NOT disable `lipSyncEnabled` — the native lip sync block must
+     * remain active for the external value to be applied.
      */
     public function enable():Void
     {
         if (enabled) return;
-        core.setLipSyncEnabled(false);
+        core.setLipSyncValue(0.0); // switch to external mode
         enabled = true;
     }
 
     /**
      * Disable this controller.
-     * Passes a negative value to `setLipSyncValue` to revert to the
-     * C-side wav file handler mode.
+     * Reverts to the C-side wav file handler mode by passing a
+     * negative value to `setLipSyncValue`.
      */
     public function disable():Void
     {
         if (!enabled) return;
-        core.setLipSyncValue(-1);
+        core.setLipSyncValue(-1); // revert to wav file handler mode
         enabled = false;
         current = 0;
     }
@@ -98,11 +120,22 @@ class L2DLipSync
     /**
      * Main loop update. Reads amplitude, applies curve + attack/release
      * smoothing, writes the result to `core.setLipSyncValue`.
-     * No-op when not enabled.
+     *
+     * Skipped (no-op) when:
+     * - Not enabled
+     * - `motionActiveProvider` is set and returns `true` (motion takes priority)
      */
     public function update(dt:Float):Void
     {
         if (!enabled) return;
+
+        // If a motion with mouth keyframes is playing, let it take priority
+        if (motionActiveProvider != null && motionActiveProvider())
+        {
+            // Reset to 0 so when motion ends, we start from a clean state
+            core.setLipSyncValue(0.0);
+            return;
+        }
 
         var raw = source.getAmplitude();
         var target = Math.pow(raw, curve) * maxValue;

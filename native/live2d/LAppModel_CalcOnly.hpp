@@ -92,6 +92,16 @@ public:
      */
     void GetTexturePath(Csm::csmInt32 textureIndex, Csm::csmChar* outBuf, Csm::csmInt32 bufLen);
 
+    /**
+     * Override to capture motion UserData events into global queue for Haxe polling.
+     */
+    virtual void MotionEventFired(const Csm::csmString& eventValue) override;
+
+    /**
+     * Expose pose pointer for ResetPose C API.
+     */
+    Csm::CubismPose* GetPose() const { return _pose; }
+
 protected:
     /**
      * Generate model from model3.json

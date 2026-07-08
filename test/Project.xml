@@ -19,7 +19,7 @@
     <source path="." />
     
     <!-- Live2D model assets -->
-    <assets path="assets/live2d" rename="assets/live2d" />
+    <assets path="assets" rename="assets" />
     
     <!-- Copy DLLs to output directory -->
     <section if="windows">

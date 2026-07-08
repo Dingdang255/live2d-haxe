@@ -28,9 +28,11 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed architecture docs and [BAC
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  Extension Layer (v0.8+)                             │
+│  Extension Layer (v0.8+, expanded in v0.9)           │
 │  L2DMotionQueue · L2DLookAt · L2DLipSync            │  Optional, composable utilities
 │  L2DEventDispatcher · L2DModelConstants              │  Pure Haxe, depends only on L2DCore
+│  L2DParts · FlxL2DGroup · L2DWavFileAudioSource      │  v0.9: Parts DSL + multi-model group
+│  L2DDebugOverlay · CLI                               │  + debug overlay + haxelib run CLI
 ├─────────────────────────────────────────────────────┤
 │  Framework Integration                               │
 │  L2DFlixelComponent / L2DHeapsObject / ...          │  Adapts to specific game framework
@@ -50,7 +52,7 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed architecture docs and [BAC
     live2d_capi.dll/.so/.dylib → Live2DCubismCore
 ```
 
-- **Extension Layer** (v0.8+): Optional, composable utility classes (`L2DMotionQueue`, `L2DLookAt`, `L2DLipSync`, `L2DEventDispatcher`, `L2DModelConstants`) that sit above `L2DCore` and depend only on its public API. Pure Haxe, zero native changes, work across all three backends. See [Extensions (v0.8+)](#extensions-v08) below.
+- **Extension Layer** (v0.8+, expanded in v0.9): Optional, composable utility classes that sit above `L2DCore` and depend only on its public API. v0.8 shipped `L2DMotionQueue`, `L2DLookAt`, `L2DLipSync`, `L2DEventDispatcher`, `L2DModelConstants` (pure Haxe, zero native changes). v0.9 adds `L2DParts` (chain DSL + tween), `FlxL2DGroup` (multi-model aggregation), `L2DWavFileAudioSource` (pure Haxe WAV decode + RMS), `L2DDebugOverlay` (Heaps+OpenFL), the `live2d.CLI` `haxelib run` tool, and a native-side motion UserData event bridge (requires native rebuild). See [Extensions (v0.8+)](#extensions-v08) below.
 - **Framework Integration Layer**: `L2DFlixelComponent` (#if flixel), `L2DHeapsObject` (#if heaps) — wraps `L2DCore` for idiomatic integration with the target game framework.
 - **Core Logic Layer** (`L2DCore`): Platform-independent batch building, mask grouping, vertex transformation, and render orchestration.
 - **Backend Interfaces** (`IL2DRenderer`, `ICubismBridge`): Contracts for rendering and native access, enabling multi-backend support.
@@ -281,7 +283,7 @@ class MyState extends FlxState
 ```haxe
 // Play a specific motion (group, index, priority)
 // Priority: 0=None, 1=Idle, 2=Normal, 3=Force
-var handle = l2d.startMotion('TapBody', 0, 3);
+var handle = l2d.core.startMotion('TapBody', 0, 3);
 
 // Check if motion is finished
 if (l2d.model.notNull() && CubismAPI.isMotionFinished(l2d.model, handle))
@@ -290,13 +292,13 @@ if (l2d.model.notNull() && CubismAPI.isMotionFinished(l2d.model, handle))
 }
 
 // Play a random Idle motion
-l2d.startIdleMotion();
+l2d.core.startIdleMotion();
 
 // Set an expression
-l2d.setExpression('smile');
+l2d.core.setExpression('smile');
 
 // Set a random expression
-l2d.setRandomExpression();
+l2d.core.setRandomExpression();
 ```
 
 ### Interactive: Hit Test and Dragging
@@ -308,16 +310,16 @@ if (FlxG.mouse.justPressed)
     var mx = FlxG.mouse.screenX;
     var my = FlxG.mouse.screenY;
     
-    if (l2d.hitTest('Body', mx, my))
+    if (l2d.core.hitTest('Body', mx, my))
     {
-        l2d.startMotion('TapBody', 0, 3);
+        l2d.core.startMotion('TapBody', 0, 3);
     }
 }
 
 // Follow mouse with eyes/head
 if (FlxG.mouse.pressed)
 {
-    l2d.setDragging(FlxG.mouse.screenX, FlxG.mouse.screenY);
+    l2d.core.setDragging(FlxG.mouse.screenX, FlxG.mouse.screenY);
 }
 ```
 
@@ -408,6 +410,48 @@ import live2d.cubism.L2DManager;          // ✅ Alias for L2DFlixelManager
 import live2d.cubism.L2DModel;            // ✅ Alias for core.L2DModel
 ```
 
+### Breaking Changes (v0.9)
+
+v0.9 removes the convenience delegate methods from `L2DHeapsObject` and `L2DFlixelComponent`. These wrappers forwarded calls to `L2DCore`, creating a redundant dual API. The components now expose only framework-specific lifecycle (`update`/`render`/`destroy`/`getSprite` for Flixel; `sync`/`onRemove` for Heaps) and transform getters (`x`/`y`/`scale`/`alpha` for Flixel). All behavior lives on `L2DCore` — accessible via the public `l2d.core` field.
+
+Migration is mechanical — prepend `core.`:
+
+```haxe
+// v0.8 old (removed)
+l2d.startMotion('TapBody', 0, 3);
+l2d.setExpression('smile');
+l2d.hitTest('Head', x, y);
+l2d.setDragging(mouseX, mouseY);
+l2d.setBreathEnabled(false);
+l2d.setLipSyncValue(0.5);
+
+// v0.9 new
+l2d.core.startMotion('TapBody', 0, 3);
+l2d.core.setExpression('smile');
+l2d.core.hitTest('Head', x, y);
+l2d.core.setDragging(mouseX, mouseY);
+l2d.core.setBreathEnabled(false);
+l2d.core.setLipSyncValue(0.5);
+```
+
+The following delegate methods have been removed from both `L2DHeapsObject` and `L2DFlixelComponent`:
+
+| Removed delegate | Replacement |
+| --- | --- |
+| `startMotion(group, no, priority)` | `core.startMotion(group, no, priority)` |
+| `startIdleMotion()` | `core.startIdleMotion()` |
+| `setExpression(id)` / `setRandomExpression()` | `core.setExpression(id)` / `core.setRandomExpression()` |
+| `hitTest(areaName, px, py)` | `core.hitTest(areaName, px, py)` |
+| `setDragging(screenX, screenY)` | `core.setDragging(screenX, screenY)` |
+| `getCanvasWidth()` / `getCanvasHeight()` | `core.getCanvasWidth()` / `core.getCanvasHeight()` |
+| `setBreathEnabled(b)` / `setEyeBlinkEnabled(b)` | `core.setBreathEnabled(b)` / `core.setEyeBlinkEnabled(b)` |
+| `setExpressionEnabled(b)` / `setLookEnabled(b)` | `core.setExpressionEnabled(b)` / `core.setLookEnabled(b)` |
+| `setPhysicsEnabled(b)` / `setLipSyncEnabled(b)` | `core.setPhysicsEnabled(b)` / `core.setLipSyncEnabled(b)` |
+| `setPoseEnabled(b)` | `core.setPoseEnabled(b)` |
+| `setLipSyncValue(v)` | `core.setLipSyncValue(v)` |
+
+> **Native rebuild required:** v0.9 also adds 8 new C APIs to `live2d_capi.h/cpp` (motion UserData event bridge + part API). Existing `live2d_capi.dll` and `live2d_hl.hdll` must be rebuilt — see [Step 3: Compile the Native DLL](#step-3-compile-the-native-dll-windows-x64).
+
 ## Usage (Heaps Backend)
 
 The Heaps backend (`#if heaps`) runs on the HL target only. It uses `h2d.Object` as the scene graph node and `h3d.mat.Texture` for textures, with a unified `hxsl.Shader` for mask/color/opacity.
@@ -448,7 +492,7 @@ class MyHeapsApp extends hxd.App
         l2d.core.scale = (s2d.height * 0.8) / l2d.modelHeight;
 
         // Play idle motion
-        l2d.startIdleMotion();
+        l2d.core.startIdleMotion();
     }
 
     override function update(dt:Float)
@@ -459,11 +503,11 @@ class MyHeapsApp extends hxd.App
         // Interaction (example: eye tracking on mouse hold)
         if (hxd.Key.isDown(hxd.Key.MOUSE_LEFT))
         {
-            l2d.setDragging(s2d.mouseX, s2d.mouseY);
+            l2d.core.setDragging(s2d.mouseX, s2d.mouseY);
         }
         else
         {
-            l2d.setDragging(l2d.core.x, l2d.core.y);
+            l2d.core.setDragging(l2d.core.x, l2d.core.y);
         }
     }
 }
@@ -482,16 +526,16 @@ class MyHeapsApp extends hxd.App
 
 ```haxe
 // Play a motion (same API as Flixel backend)
-var handle = l2d.startMotion('TapBody', 0, 3);
+var handle = l2d.core.startMotion('TapBody', 0, 3);
 
 // Play a random Idle motion
-l2d.startIdleMotion();
+l2d.core.startIdleMotion();
 
 // Set an expression
-l2d.setExpression('smile');
+l2d.core.setExpression('smile');
 
 // Set a random expression
-l2d.setRandomExpression();
+l2d.core.setRandomExpression();
 ```
 
 ### Interactive: Hit Test and Dragging
@@ -503,16 +547,16 @@ if (hxd.Key.isPressed(hxd.Key.MOUSE_LEFT))
     var mx = s2d.mouseX;
     var my = s2d.mouseY;
 
-    if (l2d.hitTest('Body', mx, my))
+    if (l2d.core.hitTest('Body', mx, my))
     {
-        l2d.startMotion('TapBody', 0, 3);
+        l2d.core.startMotion('TapBody', 0, 3);
     }
 }
 
 // Follow mouse with eyes/head
 if (hxd.Key.isDown(hxd.Key.MOUSE_LEFT))
 {
-    l2d.setDragging(s2d.mouseX, s2d.mouseY);
+    l2d.core.setDragging(s2d.mouseX, s2d.mouseY);
 }
 ```
 
@@ -521,17 +565,17 @@ if (hxd.Key.isDown(hxd.Key.MOUSE_LEFT))
 Same API as the Flixel backend — all 7 behavior modules can be toggled at runtime:
 
 ```haxe
-l2d.setBreathEnabled(false);       // Disable breathing animation
-l2d.setPhysicsEnabled(false);      // Disable physics simulation
-l2d.setEyeBlinkEnabled(false);     // Disable auto-blinking
-l2d.setExpressionEnabled(false);   // Disable expression updates
-l2d.setLookEnabled(false);         // Disable look/gaze tracking
-l2d.setLipSyncEnabled(false);      // Disable lip sync
-l2d.setPoseEnabled(false);         // Disable pose transitions
+l2d.core.setBreathEnabled(false);       // Disable breathing animation
+l2d.core.setPhysicsEnabled(false);      // Disable physics simulation
+l2d.core.setEyeBlinkEnabled(false);     // Disable auto-blinking
+l2d.core.setExpressionEnabled(false);   // Disable expression updates
+l2d.core.setLookEnabled(false);         // Disable look/gaze tracking
+l2d.core.setLipSyncEnabled(false);      // Disable lip sync
+l2d.core.setPoseEnabled(false);         // Disable pose transitions
 
 // External lip sync (microphone/audio RMS → mouth open amount)
-l2d.setLipSyncValue(0.5);          // 0.0~1.0 mouth openness
-l2d.setLipSyncValue(-1.0);         // <0 reverts to wav file handler mode
+l2d.core.setLipSyncValue(0.5);          // 0.0~1.0 mouth openness
+l2d.core.setLipSyncValue(-1.0);         // <0 reverts to wav file handler mode
 ```
 
 ### Running the Demo
@@ -550,11 +594,13 @@ cd bin/heaps
 hl heaps_demo.hl
 ```
 
-## Extensions (v0.8+)
+## Extensions (v0.8+, expanded in v0.9)
 
-The Extension Layer provides high-level utilities that reduce boilerplate for common Live2D interaction patterns. All extensions are **optional** — users adopt them by constructing classes with a `L2DCore` reference. No existing API is changed.
+The Extension Layer provides high-level utilities that reduce boilerplate for common Live2D interaction patterns. All extensions are **optional** — users adopt them by constructing classes with a `L2DCore` reference.
 
-**Design principles:** zero native changes, dependency injection (receive `L2DCore`, don't inherit), interface-first for backend-specific concerns, composable, stateful `update(dt)`. See [ARCHITECTURE.md → Extension Layer (v0.8+)](./ARCHITECTURE.md#extension-layer-v08) for full design notes.
+**Design principles:** dependency injection (receive `L2DCore`, don't inherit), interface-first for backend-specific concerns, composable, stateful `update(dt)`. v0.8 extensions are pure Haxe with zero native changes; v0.9 adds the first native-side extension (motion UserData event bridge) which requires rebuilding `live2d_capi.dll` / `live2d_hl.hdll`. See [ARCHITECTURE.md → Extension Layer (v0.8+)](./ARCHITECTURE.md#extension-layer-v08) for full design notes.
+
+> **v0.9 breaking change:** `L2DHeapsObject` and `L2DFlixelComponent` no longer expose convenience delegates for motion/expression/hit-test/behavior-toggle APIs. Use `l2d.core.startMotion(...)`, `l2d.core.setBreathEnabled(...)` etc. directly. See [Breaking Changes (v0.9)](#breaking-changes-v09) below.
 
 ### L2DMotionQueue — Priority Queue with Idle Recovery
 
@@ -608,7 +654,7 @@ var lipSync = new L2DLipSync(core, source);
 lipSync.attack = 0.5;    // snappier opening
 lipSync.release = 0.15;  // slower closing
 lipSync.curve = 1.5;     // aggressive mapping
-lipSync.enable();        // disables C-side wav mode
+lipSync.enable();        // switches to external mode
 
 // In update loop:
 lipSync.update(dt);
@@ -616,6 +662,14 @@ lipSync.update(dt);
 // To stop:
 lipSync.disable();  // reverts to wav file mode
 ```
+
+**Motion priority:** When a motion with mouth keyframes is playing, you can let the motion's own mouth parameters take priority over the audio-driven lip sync by setting `motionActiveProvider`:
+
+```haxe
+lipSync.motionActiveProvider = () -> motionQueue.current != null;
+```
+
+When the callback returns `true`, `update()` skips applying the external lip sync value, letting the motion's keyframes control the mouth. When the motion finishes, lip sync resumes automatically.
 
 ### L2DEventDispatcher — Typed Event Subscription
 
@@ -643,10 +697,182 @@ import live2d.cubism.ext.L2DModelConstants;
 class HaruConstants {}
 
 // Now you have compile-time constants:
-l2d.startMotion(HaruConstants.Motions.Idle, 0, 1);    // "Idle"
-l2d.hitTest(HaruConstants.HitAreas.Head, x, y);        // "Head"
-l2d.setExpression(HaruConstants.Expressions.F01);      // "F01"
+l2d.core.startMotion(HaruConstants.Motions.Idle, 0, 1);    // "Idle"
+l2d.core.hitTest(HaruConstants.HitAreas.Head, x, y);        // "Head"
+l2d.core.setExpression(HaruConstants.Expressions.F01);      // "F01"
 // HaruConstants.Motions.Idel  // compile error: prevents typo
+```
+
+### L2DParts — Chain DSL + Tween for Part Opacity (v0.9)
+
+```haxe
+import live2d.cubism.ext.L2DParts;
+
+var parts = new L2DParts(core);
+// Introspect part names:
+for (i in 0...parts.count) trace(parts.at(i).name);
+
+// Chain DSL — set/show/hide/toggle return the handle for chaining:
+parts.part("PartHair").set(0.5).toggle();
+
+// Tween (ease-in-out cubic, fire-and-forget — manager auto-removes finished tweens):
+parts.tween("PartHair", 0.0, 0.3); // fade out over 0.3s
+
+// In update loop:
+parts.update(dt);
+
+// Reset all parts to default opacity (cancels active tweens):
+parts.reset();
+```
+
+### FlxL2DGroup — Multi-Model Aggregation (v0.9, Flixel only)
+
+```haxe
+import live2d.cubism.flixel.FlxL2DGroup;
+import live2d.cubism.flixel.L2DFlixelComponent;
+
+var group = new FlxL2DGroup(dispatcher);
+var haru = L2DFlixelManager.create('assets/live2d/Haru/', 'Haru.model3.json');
+var bg = L2DFlixelManager.create('assets/live2d/Background/', 'bg.model3.json');
+group.add(haru);
+group.add(bg);
+group.setHitAreas(haru, ["Head", "Body"]); // per-component hit area map
+add(group);
+
+// Optional: auto mouse hit test + drag (topmost-first):
+group.autoMouseHitTest = true;
+group.autoMouseDrag = true;
+
+// Optional: camera follow:
+group.followCamera = FlxG.camera;
+group.followTarget = haru;
+group.followLerp = 0.1;
+
+// In update loop:
+group.update(elapsed);
+
+// FlxCollision integration:
+var bounds:FlxRect = group.getComponentBounds(haru);
+var hit:L2DFlixelComponent = group.hitTestPoint(FlxG.mouse.x, FlxG.mouse.y);
+```
+
+### L2DWavFileAudioSource — Pure Haxe WAV Decode + RMS (v0.9)
+
+Drop-in `IL2DAudioSource` implementation that decodes a 16-bit PCM WAV file in pure Haxe and exposes a sliding-window RMS amplitude. Pairs with `L2DLipSync` to drive mouth sync from a voice file without any native audio dependency.
+
+> **Important:** This class only decodes WAV data and provides RMS amplitude — it does **not** play audio. For actual audio output, use your backend's audio API (e.g. OpenFL `Sound`/`SoundChannel`, Heaps `hxd.snd.Channel`). Use `positionProvider` to sync the RMS calculation to actual audio playback.
+
+**Self-advancing mode** (simple, but may drift from actual audio):
+
+```haxe
+import live2d.cubism.ext.L2DWavFileAudioSource;
+import live2d.cubism.ext.L2DLipSync;
+
+var source = new L2DWavFileAudioSource('assets/audio/voice_001.wav');
+source.looping = false; // default: true
+var lipSync = new L2DLipSync(core, source);
+lipSync.enable();
+
+// In update loop (drives playhead and RMS window):
+source.update(dt);
+lipSync.update(dt);
+```
+
+**External sync mode** (recommended — syncs RMS to actual audio playback):
+
+```haxe
+import openfl.media.Sound;
+import openfl.media.SoundChannel;
+import openfl.events.Event;
+
+var source = new L2DWavFileAudioSource('assets/audio/voice_001.wav');
+source.looping = true; // match audio looping behavior
+
+// Play audio via backend (OpenFL example)
+var sound = Sound.fromFile('assets/audio/voice_001.wav');
+
+// Looping: OpenFL Sound.play loops param is unreliable across backends.
+// Use Event.SOUND_COMPLETE + recursive replay for reliable looping.
+function playLipSyncAudio():Void {
+    var channel = sound.play();
+    // Sync RMS position to actual audio playback (milliseconds → seconds)
+    source.positionProvider = () -> channel.position / 1000.0;
+    // Re-bind SOUND_COMPLETE for recursive looping
+    channel.addEventListener(Event.SOUND_COMPLETE, (e) -> {
+        playLipSyncAudio();
+    });
+}
+playLipSyncAudio();
+
+var lipSync = new L2DLipSync(core, source);
+lipSync.enable();
+
+// In update loop:
+source.update(dt);     // syncs position from SoundChannel
+lipSync.update(dt);    // reads getAmplitude() → drives mouth
+```
+
+**Loading from bytes** (e.g. from embedded resource):
+
+```haxe
+var source2 = L2DWavFileAudioSource.fromBytes(haxe.Resource.getBytes('voice_002'));
+```
+
+### L2DDebugOverlay — Bounds/Params/HitAreas Visualization (v0.9)
+
+Abstract base class with backend-specific subclasses: `L2DHeapsDebugOverlay` (Heaps) and `L2DOpenFLDebugOverlay` (OpenFL/Flixel). Toggle drawable bounds, parameter values, and hit-area outlines at runtime.
+
+```haxe
+import live2d.cubism.ext.openfl.L2DOpenFLDebugOverlay;
+
+var overlay = new L2DOpenFLDebugOverlay(core);
+overlay.showBounds = true;
+overlay.showParams = true;
+overlay.paramsToShow = ["ParamAngleX", "ParamAngleY", "ParamMouthOpenY"];
+overlay.showHitAreas = true;
+overlay.hitAreas = ["Head", "Body"];
+FlxG.stage.addChild(overlay.getDisplay());
+
+// In update loop (after model update + render):
+overlay.render();
+```
+
+### Motion UserData Events — Native Bridge (v0.9)
+
+Cubism motion timelines can emit UserData strings (e.g. `"voice_001"` to trigger a sound). v0.9 adds a native-side bridge: `LAppModel_CalcOnly` overrides the `MotionEventFired` virtual function to collect events into a per-model queue, and `L2DEventDispatcher.pollMotionEvents()` drains the queue each frame.
+
+Two subscription channels:
+
+```haxe
+// 1. Dynamic callback (set once):
+dispatcher.onMotionUserDataEvent = (value) -> {
+    trace('UserData: $value');
+    // e.g. play sound: assets/audio/${value}.wav
+};
+
+// 2. Typed subscription (token-based):
+var token = dispatcher.onMotionUserData((value) -> {
+    trace('UserData (typed): $value');
+});
+
+// L2DMotionQueue.update(dt) automatically calls dispatcher.pollMotionEvents()
+// at the top of each frame. If you don't use MotionQueue, call it manually:
+dispatcher.pollMotionEvents();
+```
+
+> Requires rebuilding `live2d_capi.dll` and `live2d_hl.hdll` — the native side gains 8 new C APIs (`l2d_poll_motion_events` + 7 part APIs).
+
+### CLI — `haxelib run live2d-haxe` (v0.9)
+
+```bash
+# Generate a Haxe constants class from model3.json (mirrors @:build macro output):
+haxelib run live2d-haxe --gen-constants path/to/Haru.model3.json HaruConstants.hx HaruConstants
+
+# List all asset files referenced by model3.json:
+haxelib run live2d-haxe --gen-asset-list path/to/Haru.model3.json
+
+# Validate that all referenced files exist on disk:
+haxelib run live2d-haxe --validate path/to/Haru.model3.json
 ```
 
 ### InputAdapter — Unified Input Across Backends
@@ -711,10 +937,27 @@ adapter.dispose();
 | `release` | Closing speed coefficient (0..1), default 0.2 |
 | `curve` | Volume-to-mouth mapping exponent, default 1.5 |
 | `maxValue` | Maximum mouth open value, default 1.0 |
+| `motionActiveProvider` | Optional callback; when returns `true`, skips lip sync (motion takes priority) |
 | `new(core, source)` | Construct with L2DCore and `IL2DAudioSource` |
-| `enable()` | Take over lip sync from C-side wav mode |
+| `enable()` | Switch to external lip sync mode (does NOT disable `lipSyncEnabled`) |
 | `disable()` | Revert to wav file handler mode |
-| `update(dt)` | Main loop update — writes to `core.setLipSyncValue` |
+| `update(dt)` | Main loop update — writes to `core.setLipSyncValue` (skips if `motionActiveProvider` returns true) |
+
+#### L2DWavFileAudioSource
+
+| Property/Method | Description |
+| --- | --- |
+| `looping` | Whether to loop when reaching the end (default `true`) |
+| `positionProvider` | Optional callback returning time in seconds; when set, syncs position to external audio source |
+| `finished` | Whether playback reached the end in non-looping mode (read-only) |
+| `new(?path)` | Load from file path (requires `sys`); pass `null` for `fromBytes` |
+| `fromBytes(bytes)` | Static: create from in-memory bytes |
+| `update(dt)` | Advance or sync playback position |
+| `getAmplitude()` | Sliding-window RMS amplitude `[0, 1]` |
+| `setWindowSize(n)` | Set RMS window size in frames (default 1024) |
+| `rewind()` | Reset position to beginning |
+| `currentTime` | Current playback position in seconds (read-only) |
+| `duration` | Total duration in seconds (read-only) |
 
 #### L2DEventDispatcher
 
@@ -745,48 +988,32 @@ adapter.dispose();
 
 ### L2DFlixelComponent (extends FlxBasic)
 
+> **v0.9:** Convenience delegates for motion/expression/hit-test/behavior-toggle APIs have been removed. Use `l2d.core.startMotion(...)`, `l2d.core.setBreathEnabled(...)`, etc. The component only exposes framework-specific lifecycle (`update`/`render`/`destroy`/`getSprite`) and transform getters (`x`/`y`/`scale`/`alpha`).
+
 | Property/Method | Description |
 | --- | --- |
-| `x`, `y` | Screen position |
-| `scale` | Render scale factor |
-| `alpha` | Global opacity multiplier |
+| `core` | Underlying `L2DCore` — single source of truth for all behavior (motion/expression/hit-test/toggles). Use this for `startMotion`, `setExpression`, `hitTest`, `setDragging`, `setBreathEnabled`, ... |
+| `x`, `y` | Screen position (delegates to `core.x`/`core.y`) |
+| `scale` | Render scale factor (delegates to `core.scale`) |
+| `alpha` | Global opacity multiplier (delegates to `core.alpha`) |
 | `model` | Underlying `L2DModel` handle |
+| `modelDir`, `modelFileName` | Model path info |
 | `modelWidth`, `modelHeight` | Computed model bounds |
-| `startMotion(group, no, priority)` | Play a motion |
-| `startIdleMotion()` | Play random Idle motion |
-| `setExpression(id)` | Set expression by ID |
-| `setRandomExpression()` | Set random expression |
-| `hitTest(areaName, px, py)` | Hit test at screen coordinates |
-| `setDragging(screenX, screenY)` | Set drag/follow target |
 | `getSprite()` | Get OpenFL Sprite container |
 | `render()` | Redraw all visible drawables |
-| `getCanvasWidth()`, `getCanvasHeight()` | Model canvas dimensions |
 
 ### L2DHeapsObject (extends h2d.Object, #if heaps)
 
 Auto-updates and renders in `sync(ctx)` — no manual `update`/`render` calls needed.
 
+> **v0.9:** Convenience delegates for motion/expression/hit-test/behavior-toggle APIs have been removed. Use `l2d.core.startMotion(...)`, `l2d.core.setBreathEnabled(...)`, etc.
+
 | Property/Method | Description |
 | --- | --- |
-| `core` | Underlying `L2DCore` (public, for x/y/scale/alpha/advanced access) |
+| `core` | Underlying `L2DCore` — single source of truth for all behavior. Use this for `startMotion`, `setExpression`, `hitTest`, `setDragging`, `setBreathEnabled`, ... |
 | `model` | Underlying `L2DModel` handle |
-| `modelWidth`, `modelHeight` | Computed model bounds |
 | `modelDir`, `modelFileName` | Model path info |
-| `startMotion(group, no, priority)` | Play a motion |
-| `startIdleMotion()` | Play random Idle motion |
-| `setExpression(id)` | Set expression by ID |
-| `setRandomExpression()` | Set random expression |
-| `hitTest(areaName, px, py)` | Hit test at screen coordinates |
-| `setDragging(screenX, screenY)` | Set drag/follow target |
-| `getCanvasWidth()`, `getCanvasHeight()` | Model canvas dimensions |
-| `setBreathEnabled(b)` | Toggle breathing animation |
-| `setEyeBlinkEnabled(b)` | Toggle auto-blink |
-| `setExpressionEnabled(b)` | Toggle expression updates |
-| `setLookEnabled(b)` | Toggle look/gaze tracking |
-| `setPhysicsEnabled(b)` | Toggle physics simulation |
-| `setLipSyncEnabled(b)` | Toggle lip sync |
-| `setPoseEnabled(b)` | Toggle pose transitions |
-| `setLipSyncValue(v)` | Set external lip sync value (0~1, <0 reverts to wav mode) |
+| `modelWidth`, `modelHeight` | Computed model bounds |
 
 > **Transform**: Set `l2d.core.x`, `l2d.core.y` for screen position, `l2d.core.scale` for scale, and `l2d.core.alpha` for opacity. `h2d.Object`'s own `x`/`y`/`scaleX`/`scaleY`/`alpha` are kept at identity to avoid double-transform. Do NOT use `scaleX`/`scaleY` or `scale(v)` method. See [Usage (Heaps Backend) → Transform Note](#transform-note).
 

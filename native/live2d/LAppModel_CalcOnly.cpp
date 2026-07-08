@@ -668,3 +668,14 @@ csmBool LAppModel_CalcOnly::IsLookEnabled() const { return _lookEnabled; }
 csmBool LAppModel_CalcOnly::IsPhysicsEnabled() const { return _physicsEnabled; }
 csmBool LAppModel_CalcOnly::IsLipSyncEnabled() const { return _lipSyncEnabled; }
 csmBool LAppModel_CalcOnly::IsPoseEnabled() const { return _poseEnabled; }
+
+// ===== Motion Event Override =====
+
+void LAppModel_CalcOnly::MotionEventFired(const csmString& eventValue)
+{
+    // Forward to global queue for Haxe polling
+    extern void EnqueueMotionEvent(void*, const csmString&);
+    EnqueueMotionEvent(this, eventValue);
+    // Call base for any default handling
+    CubismUserModel::MotionEventFired(eventValue);
+}

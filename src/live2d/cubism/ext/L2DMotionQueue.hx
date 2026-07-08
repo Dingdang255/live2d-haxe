@@ -39,7 +39,7 @@ class L2DMotionQueue
     var dispatcher:L2DEventDispatcher;
 
     /** Currently playing motion, or null if none. */
-    var current:{group:String, no:Int, priority:Int, handle:Int};
+    public var current(default, null):{group:String, no:Int, priority:Int, handle:Int};
 
     /** Pending motions awaiting their turn. */
     var pending:Array<{group:String, no:Int, priority:Int}>;
@@ -128,9 +128,12 @@ class L2DMotionQueue
         idleRecoveryEnabled = false;
     }
 
-    /** Main loop update. Polls current motion completion and triggers idle recovery. */
+    /** Main loop update. Polls motion UserData events, current motion completion, and triggers idle recovery. */
     public function update(dt:Float):Void
     {
+        // Poll native motion UserData events (drains native queue → dispatches MotionUserData)
+        if (dispatcher != null) dispatcher.pollMotionEvents();
+
         if (current != null)
         {
             if (CubismAPI.isMotionFinished(core.model, current.handle))

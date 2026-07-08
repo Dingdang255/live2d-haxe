@@ -65,6 +65,14 @@ struct L2DFunctions {
     unsigned int (*get_core_version)();
     unsigned int (*get_latest_moc_version)();
     bool (*has_moc_consistency)(const char*);
+    int (*poll_motion_events)(void*, char*, int);
+    void (*clear_motion_events)(void*);
+    int (*get_part_count)(void*);
+    int (*find_part_index)(void*, const char*);
+    void (*get_part_id)(void*, int, char*, int);
+    float (*get_part_opacity)(void*, int);
+    void (*set_part_opacity)(void*, int, float);
+    void (*reset_pose)(void*);
     bool loaded;
 };
 static L2DFunctions l2dFn = {0};
@@ -126,6 +134,14 @@ static void l2d_ensure_loaded() {
     L2D_LOAD(get_core_version);
     L2D_LOAD(get_latest_moc_version);
     L2D_LOAD(has_moc_consistency);
+    L2D_LOAD(poll_motion_events);
+    L2D_LOAD(clear_motion_events);
+    L2D_LOAD(get_part_count);
+    L2D_LOAD(find_part_index);
+    L2D_LOAD(get_part_id);
+    L2D_LOAD(get_part_opacity);
+    L2D_LOAD(set_part_opacity);
+    L2D_LOAD(reset_pose);
     #undef L2D_LOAD
     l2dFn.loaded = true;
 }
@@ -418,6 +434,56 @@ class HxcppWindowsBridge implements ICubismBridge
     public function hasMocConsistency(mocFilePath:String):Bool
     {
         return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.has_moc_consistency ? l2dFn.has_moc_consistency({0}.utf8_str()) : false)', mocFilePath);
+    }
+
+    // ===== Motion Event Polling =====
+
+    public function pollMotionEvents(model:L2DModel, outBuf:Bytes, bufLen:Int):Int
+    {
+        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.poll_motion_events ? l2dFn.poll_motion_events(M((cpp::Int64){0}), (char*)({1}->b.mPtr->GetBase()), {2}) : 0)', m(model), outBuf, bufLen);
+    }
+
+    public function clearMotionEvents(model:L2DModel):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.clear_motion_events) l2dFn.clear_motion_events(M((cpp::Int64){0}))', m(model));
+    }
+
+    // ===== Parts =====
+
+    public function getPartCount(model:L2DModel):Int
+    {
+        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.get_part_count ? l2dFn.get_part_count(M((cpp::Int64){0})) : 0)', m(model));
+    }
+
+    public function findPartIndex(model:L2DModel, name:String):Int
+    {
+        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.find_part_index ? l2dFn.find_part_index(M((cpp::Int64){0}), {1}.utf8_str()) : -1)', m(model), name);
+    }
+
+    public function getPartId(model:L2DModel, partIndex:Int):String
+    {
+        var buf = Bytes.alloc(256);
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.get_part_id) l2dFn.get_part_id(M((cpp::Int64){0}), {1}, (char*)({2}->b.mPtr->GetBase()), 256)', m(model), partIndex, buf);
+        var len = 0;
+        while (len < 256 && buf.get(len) != 0) len++;
+        return buf.getString(0, len);
+    }
+
+    public function getPartOpacity(model:L2DModel, partIndex:Int):Float
+    {
+        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.get_part_opacity ? l2dFn.get_part_opacity(M((cpp::Int64){0}), {1}) : 0.0f)', m(model), partIndex);
+    }
+
+    public function setPartOpacity(model:L2DModel, partIndex:Int, opacity:Float):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.set_part_opacity) l2dFn.set_part_opacity(M((cpp::Int64){0}), {1}, {2})', m(model), partIndex, opacity);
+    }
+
+    // ===== Pose Reset =====
+
+    public function resetPose(model:L2DModel):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.reset_pose) l2dFn.reset_pose(M((cpp::Int64){0}))', m(model));
     }
 }
 

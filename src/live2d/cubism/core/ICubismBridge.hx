@@ -85,6 +85,20 @@ interface ICubismBridge
     // LipSync value (external audio/microphone input)
     function setLipSyncValue(model:L2DModel, value:Float):Void;
 
+    // Motion event polling
+    function pollMotionEvents(model:L2DModel, outBuf:Bytes, bufLen:Int):Int;
+    function clearMotionEvents(model:L2DModel):Void;
+
+    // Parts
+    function getPartCount(model:L2DModel):Int;
+    function findPartIndex(model:L2DModel, name:String):Int;
+    function getPartId(model:L2DModel, partIndex:Int):String;
+    function getPartOpacity(model:L2DModel, partIndex:Int):Float;
+    function setPartOpacity(model:L2DModel, partIndex:Int, opacity:Float):Void;
+
+    // Pose reset
+    function resetPose(model:L2DModel):Void;
+
     // Moc version checking
     function getCoreVersion():Int;
     function getLatestMocVersion():Int;

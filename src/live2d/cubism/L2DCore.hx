@@ -1627,6 +1627,61 @@ class L2DCore
         if (model.notNull()) bridge.setLipSyncValue(model, value);
     }
 
+    // ===== Parts API =====
+
+    public function getPartCount():Int
+    {
+        if (model.isNull()) return 0;
+        return bridge.getPartCount(model);
+    }
+
+    public function findPartIndex(name:String):Int
+    {
+        if (model.isNull()) return -1;
+        return bridge.findPartIndex(model, name);
+    }
+
+    public function getPartId(partIndex:Int):String
+    {
+        if (model.isNull()) return "";
+        return bridge.getPartId(model, partIndex);
+    }
+
+    public function getPartOpacity(partIndex:Int):Float
+    {
+        if (model.isNull()) return 0;
+        return bridge.getPartOpacity(model, partIndex);
+    }
+
+    public function setPartOpacity(partIndex:Int, opacity:Float):Void
+    {
+        if (model.notNull()) bridge.setPartOpacity(model, partIndex, opacity);
+    }
+
+    public function setPartOpacityByName(name:String, opacity:Float):Void
+    {
+        var idx = findPartIndex(name);
+        if (idx >= 0) setPartOpacity(idx, opacity);
+    }
+
+    public function resetPose():Void
+    {
+        if (model.notNull()) bridge.resetPose(model);
+    }
+
+    // ===== Motion Event Polling =====
+
+    public function pollMotionEvents(outBuf:Bytes, bufLen:Int):Int
+    {
+        if (model.isNull()) return 0;
+        return bridge.pollMotionEvents(model, outBuf, bufLen);
+    }
+
+    public function clearMotionEvents():Void
+    {
+        if (model.notNull()) bridge.clearMotionEvents(model);
+    }
+
     // ===== Moc Version Checking =====
 
     public static function getCoreVersion():Int

@@ -102,6 +102,26 @@ L2D_API void  l2d_set_pose_enabled(L2D_Model m, bool enabled);
 // value: 0.0~1.0 for external mode, <0 to revert to wav file handler
 L2D_API void  l2d_set_lip_sync_value(L2D_Model m, float value);
 
+// ===== Motion Event Polling =====
+// Returns the number of pending motion UserData events for model m.
+// Events are written to outBuf as null-separated UTF-8 strings with a
+// double-null terminator. The queue is auto-cleared after polling.
+L2D_API int l2d_poll_motion_events(L2D_Model m, char* outBuf, int bufLen);
+// Clear all pending motion events for model m without retrieving them.
+L2D_API void l2d_clear_motion_events(L2D_Model m);
+
+// ===== Parts API =====
+L2D_API int   l2d_get_part_count(L2D_Model m);
+L2D_API int   l2d_find_part_index(L2D_Model m, const char* name);
+L2D_API void  l2d_get_part_id(L2D_Model m, int partIndex, char* outBuf, int bufLen);
+L2D_API float l2d_get_part_opacity(L2D_Model m, int partIndex);
+L2D_API void  l2d_set_part_opacity(L2D_Model m, int partIndex, float opacity);
+
+// ===== Pose Reset =====
+// Resets pose part opacities to default values defined in .pose3.json.
+// No-op if the model has no pose file.
+L2D_API void l2d_reset_pose(L2D_Model m);
+
 // ===== Moc Version Checking =====
 L2D_API unsigned int l2d_get_core_version();
 L2D_API unsigned int l2d_get_latest_moc_version();

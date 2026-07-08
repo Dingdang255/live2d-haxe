@@ -209,4 +209,34 @@ class CubismAPI
 
     public static function hasMocConsistency(mocFilePath:String):Bool
         return getBridge().hasMocConsistency(mocFilePath);
+
+    // ===== Motion Event Polling =====
+
+    public static function pollMotionEvents(model:L2DModel, outBuf:Bytes, bufLen:Int):Int
+        return getBridge().pollMotionEvents(model, outBuf, bufLen);
+
+    public static function clearMotionEvents(model:L2DModel):Void
+        getBridge().clearMotionEvents(model);
+
+    // ===== Parts =====
+
+    public static function getPartCount(model:L2DModel):Int
+        return getBridge().getPartCount(model);
+
+    public static function findPartIndex(model:L2DModel, name:String):Int
+        return getBridge().findPartIndex(model, name);
+
+    public static function getPartId(model:L2DModel, partIndex:Int):String
+        return getBridge().getPartId(model, partIndex);
+
+    public static function getPartOpacity(model:L2DModel, partIndex:Int):Float
+        return getBridge().getPartOpacity(model, partIndex);
+
+    public static function setPartOpacity(model:L2DModel, partIndex:Int, opacity:Float):Void
+        getBridge().setPartOpacity(model, partIndex, opacity);
+
+    // ===== Pose Reset =====
+
+    public static function resetPose(model:L2DModel):Void
+        getBridge().resetPose(model);
 }

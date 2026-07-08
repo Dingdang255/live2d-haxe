@@ -28,6 +28,7 @@ class L2DEventDispatcher
 
     var motionBeganCbs:Array<{token:Int, cb:(group:String, no:Int, handle:Int) -> Void}>;
     var motionFinishedCbs:Array<{token:Int, cb:(group:String, no:Int, handle:Int) -> Void}>;
+    var motionUserDataCbs:Array<{token:Int, cb:(value:String) -> Void}>;
     var expressionSetCbs:Array<{token:Int, cb:(id:String) -> Void}>;
     var hitTestCbs:Array<{token:Int, cb:(areaName:String, screenX:Float, screenY:Float) -> Void}>;
     var idleRecoveryCbs:Array<{token:Int, cb:(group:String) -> Void}>;
@@ -40,6 +41,7 @@ class L2DEventDispatcher
         this.core = core;
         motionBeganCbs = [];
         motionFinishedCbs = [];
+        motionUserDataCbs = [];
         expressionSetCbs = [];
         hitTestCbs = [];
         idleRecoveryCbs = [];
@@ -59,6 +61,13 @@ class L2DEventDispatcher
     {
         var token = nextToken++;
         motionFinishedCbs.push({token: token, cb: cb});
+        return token;
+    }
+
+    public function onMotionUserData(cb:(value:String) -> Void):Int
+    {
+        var token = nextToken++;
+        motionUserDataCbs.push({token: token, cb: cb});
         return token;
     }
 
@@ -95,6 +104,7 @@ class L2DEventDispatcher
     {
         removeTokenAny(motionBeganCbs, token);
         removeTokenAny(motionFinishedCbs, token);
+        removeTokenAny(motionUserDataCbs, token);
         removeTokenAny(expressionSetCbs, token);
         removeTokenAny(hitTestCbs, token);
         removeTokenAny(idleRecoveryCbs, token);
@@ -106,6 +116,7 @@ class L2DEventDispatcher
     {
         motionBeganCbs = [];
         motionFinishedCbs = [];
+        motionUserDataCbs = [];
         expressionSetCbs = [];
         hitTestCbs = [];
         idleRecoveryCbs = [];
@@ -122,6 +133,8 @@ class L2DEventDispatcher
                 for (l in motionBeganCbs) l.cb(group, no, handle);
             case MotionFinished(group, no, handle):
                 for (l in motionFinishedCbs) l.cb(group, no, handle);
+            case MotionUserData(value):
+                for (l in motionUserDataCbs) l.cb(value);
             case ExpressionSet(id):
                 for (l in expressionSetCbs) l.cb(id);
             case HitTest(areaName, screenX, screenY):
@@ -139,6 +152,37 @@ class L2DEventDispatcher
     public function notifyExpressionSet(id:String):Void
     {
         dispatch(ExpressionSet(id));
+    }
+
+    // ===== Motion UserData event polling =====
+
+    /** Optional direct callback (alternative to onMotionUserData subscription). */
+    public dynamic function onMotionUserDataEvent(value:String):Void {}
+
+    /**
+     * Poll native motion UserData events and dispatch them.
+     * Call every frame (e.g. from L2DMotionQueue.update) to drain the
+     * native event queue. Each event fires both `onMotionUserDataEvent`
+     * (dynamic callback) and `MotionUserData` (typed subscription).
+     */
+    public function pollMotionEvents():Void
+    {
+        if (core == null || core.model.isNull()) return;
+        var buf = haxe.io.Bytes.alloc(4096);
+        var count = core.pollMotionEvents(buf, buf.length);
+        if (count <= 0) return;
+        // Parse null-separated strings (double-null terminated)
+        var pos = 0;
+        while (pos < buf.length)
+        {
+            var end = pos;
+            while (end < buf.length && buf.get(end) != 0) end++;
+            if (end == pos) break; // empty string = end of list
+            var value = buf.getString(pos, end - pos);
+            onMotionUserDataEvent(value);
+            dispatch(MotionUserData(value));
+            pos = end + 1; // skip null terminator
+        }
     }
 
     // ===== Convenience: hit test multiple areas =====

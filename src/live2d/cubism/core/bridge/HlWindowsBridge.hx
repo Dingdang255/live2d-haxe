@@ -208,6 +208,42 @@ class HlWindowsBridge implements ICubismBridge
     public function hasMocConsistency(mocFilePath:String):Bool
         return hlHasMocConsistency(toUtf8(mocFilePath));
 
+    // ===== Motion Event Polling =====
+
+    public function pollMotionEvents(model:L2DModel, outBuf:Bytes, bufLen:Int):Int
+        return hlPollMotionEvents(cast model, @:privateAccess outBuf.b, bufLen);
+
+    public function clearMotionEvents(model:L2DModel):Void
+        hlClearMotionEvents(cast model);
+
+    // ===== Parts =====
+
+    public function getPartCount(model:L2DModel):Int
+        return hlGetPartCount(cast model);
+
+    public function findPartIndex(model:L2DModel, name:String):Int
+        return hlFindPartIndex(cast model, toUtf8(name));
+
+    public function getPartId(model:L2DModel, partIndex:Int):String
+    {
+        var buf = Bytes.alloc(256);
+        hlGetPartId(cast model, partIndex, @:privateAccess buf.b, 256);
+        var len = 0;
+        while (len < 256 && buf.get(len) != 0) len++;
+        return buf.getString(0, len);
+    }
+
+    public function getPartOpacity(model:L2DModel, partIndex:Int):Float
+        return hlGetPartOpacity(cast model, partIndex);
+
+    public function setPartOpacity(model:L2DModel, partIndex:Int, opacity:Float):Void
+        hlSetPartOpacity(cast model, partIndex, opacity);
+
+    // ===== Pose Reset =====
+
+    public function resetPose(model:L2DModel):Void
+        hlResetPose(cast model);
+
     // ============================================================
     // @:hlNative bindings to live2d_hl.hdll
     // ============================================================
@@ -263,6 +299,14 @@ class HlWindowsBridge implements ICubismBridge
     @:hlNative("live2d_hl", "get_core_version")                              static function hlGetCoreVersion():Int return 0;
     @:hlNative("live2d_hl", "get_latest_moc_version")                        static function hlGetLatestMocVersion():Int return 0;
     @:hlNative("live2d_hl", "has_moc_consistency")                           static function hlHasMocConsistency(path:hl.Bytes):Bool return false;
+    @:hlNative("live2d_hl", "poll_motion_events")                            static function hlPollMotionEvents(model:hl.I64, out:hl.Bytes, len:Int):Int return 0;
+    @:hlNative("live2d_hl", "clear_motion_events")                           static function hlClearMotionEvents(model:hl.I64):Void {}
+    @:hlNative("live2d_hl", "get_part_count")                                static function hlGetPartCount(model:hl.I64):Int return 0;
+    @:hlNative("live2d_hl", "find_part_index")                               static function hlFindPartIndex(model:hl.I64, name:hl.Bytes):Int return -1;
+    @:hlNative("live2d_hl", "get_part_id")                                   static function hlGetPartId(model:hl.I64, idx:Int, out:hl.Bytes, len:Int):Void {}
+    @:hlNative("live2d_hl", "get_part_opacity")                              static function hlGetPartOpacity(model:hl.I64, idx:Int):Float return 0;
+    @:hlNative("live2d_hl", "set_part_opacity")                              static function hlSetPartOpacity(model:hl.I64, idx:Int, opacity:Float):Void {}
+    @:hlNative("live2d_hl", "reset_pose")                                    static function hlResetPose(model:hl.I64):Void {}
 }
 
 #end

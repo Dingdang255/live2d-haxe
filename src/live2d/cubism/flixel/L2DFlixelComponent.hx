@@ -96,32 +96,6 @@ class L2DFlixelComponent extends FlxBasic
     public var modelHeight(get, never):Float;
     function get_modelHeight() return core.modelHeight;
 
-    // ===== Convenience API =====
-
-    public function startMotion(group:String, no:Int = 0, priority:Int = 2):Int
-        return core.startMotion(group, no, priority);
-
-    public function startIdleMotion():Int
-        return core.startIdleMotion();
-
-    public function setExpression(id:String):Void
-        core.setExpression(id);
-
-    public function setRandomExpression():Void
-        core.setRandomExpression();
-
-    public function hitTest(areaName:String, px:Float, py:Float):Bool
-        return core.hitTest(areaName, px, py);
-
-    public function setDragging(screenX:Float, screenY:Float):Void
-        core.setDragging(screenX, screenY);
-
-    public function getCanvasWidth():Float
-        return core.getCanvasWidth();
-
-    public function getCanvasHeight():Float
-        return core.getCanvasHeight();
-
     // ===== Flixel texture helpers =====
 
     static function flixelTextureLoader(path:String):L2DTextureHandle

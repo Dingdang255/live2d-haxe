@@ -12,6 +12,7 @@
 #include <Id/CubismIdManager.hpp>
 #include <Model/CubismModel.hpp>
 #include <Motion/CubismMotionQueueManager.hpp>
+#include <Effect/CubismPose.hpp>
 #include <Live2DCubismCore.hpp>
 #include <Model/CubismMoc.hpp>
 #include <fstream>
@@ -31,6 +32,19 @@ static LAppAllocator_Common s_allocator;
 static LAppModel_CalcOnly* GetModel(L2D_Model m)
 {
     return reinterpret_cast<LAppModel_CalcOnly*>(m);
+}
+
+// Per-model motion UserData event queue. Populated by
+// LAppModel_CalcOnly::MotionEventFired (via EnqueueMotionEvent) and
+// drained by l2d_poll_motion_events from the Haxe side.
+// Declared early so l2d_release_model can erase entries on model teardown.
+static std::unordered_map<L2D_Model, std::vector<Csm::csmString>> g_motionEventQueues;
+
+// Called by LAppModel_CalcOnly::MotionEventFired to enqueue a motion
+// UserData event for later polling by the Haxe layer.
+void EnqueueMotionEvent(L2D_Model m, const Csm::csmString& eventValue)
+{
+    g_motionEventQueues[m].push_back(eventValue);
 }
 
 // ===== Lifecycle =====
@@ -62,6 +76,7 @@ L2D_API L2D_Model l2d_load_model(const char* dir, const char* fileName)
 L2D_API void l2d_release_model(L2D_Model m)
 {
     if (m == NULL) return;
+    g_motionEventQueues.erase(m);
     LAppModel_CalcOnly* model = GetModel(m);
     delete model;
 }
@@ -553,4 +568,96 @@ L2D_API bool l2d_has_moc_consistency(const char* mocFilePath)
     OutputDebugStringA(buf);
 
     return result;
+}
+
+// ===== Motion Event Polling =====
+
+L2D_API int l2d_poll_motion_events(L2D_Model m, char* outBuf, int bufLen)
+{
+    if (m == NULL || outBuf == NULL || bufLen <= 0) return 0;
+    auto it = g_motionEventQueues.find(m);
+    if (it == g_motionEventQueues.end() || it->second.empty()) return 0;
+
+    int eventCount = 0;
+    int writePos = 0;
+    for (auto& evt : it->second)
+    {
+        int evtLen = evt.GetLength() + 1; // include null terminator
+        if (writePos + evtLen > bufLen - 1) break; // reserve final null
+        memcpy(outBuf + writePos, evt.GetRawString(), evtLen);
+        writePos += evtLen;
+        eventCount++;
+    }
+    outBuf[writePos] = '\0'; // double-null terminator
+    it->second.clear(); // auto-clear after poll
+    return eventCount;
+}
+
+L2D_API void l2d_clear_motion_events(L2D_Model m)
+{
+    if (m == NULL) return;
+    auto it = g_motionEventQueues.find(m);
+    if (it != g_motionEventQueues.end()) it->second.clear();
+}
+
+// ===== Parts API =====
+
+L2D_API int l2d_get_part_count(L2D_Model m)
+{
+    if (m == NULL) return 0;
+    CubismModel* model = GetModel(m)->GetModel();
+    return model->GetPartCount();
+}
+
+L2D_API int l2d_find_part_index(L2D_Model m, const char* name)
+{
+    if (m == NULL || name == NULL) return -1;
+    CubismModel* model = GetModel(m)->GetModel();
+    CubismIdHandle id = CubismFramework::GetIdManager()->GetId(name);
+    return model->GetPartIndex(id);
+}
+
+L2D_API void l2d_get_part_id(L2D_Model m, int partIndex, char* outBuf, int bufLen)
+{
+    if (m == NULL || outBuf == NULL || bufLen <= 0)
+    {
+        if (outBuf != NULL && bufLen > 0) outBuf[0] = '\0';
+        return;
+    }
+    CubismModel* model = GetModel(m)->GetModel();
+    CubismIdHandle id = model->GetPartId(partIndex);
+    if (id == NULL)
+    {
+        outBuf[0] = '\0';
+        return;
+    }
+    const char* name = id->GetString().GetRawString();
+    strncpy_s(outBuf, bufLen, name, _TRUNCATE);
+}
+
+L2D_API float l2d_get_part_opacity(L2D_Model m, int partIndex)
+{
+    if (m == NULL) return 0.0f;
+    CubismModel* model = GetModel(m)->GetModel();
+    return model->GetPartOpacity(partIndex);
+}
+
+L2D_API void l2d_set_part_opacity(L2D_Model m, int partIndex, float opacity)
+{
+    if (m == NULL) return;
+    CubismModel* model = GetModel(m)->GetModel();
+    model->SetPartOpacity(partIndex, opacity);
+}
+
+// ===== Pose Reset =====
+
+L2D_API void l2d_reset_pose(L2D_Model m)
+{
+    if (m == NULL) return;
+    LAppModel_CalcOnly* model = GetModel(m);
+    Csm::CubismPose* pose = model->GetPose();
+    if (pose != NULL)
+    {
+        pose->Reset(model->GetModel());
+    }
 }
