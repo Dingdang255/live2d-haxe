@@ -28,24 +28,30 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed architecture docs and [BAC
 
 ```
 ┌─────────────────────────────────────────────────────┐
+│  Extension Layer (v0.8+)                             │
+│  L2DMotionQueue · L2DLookAt · L2DLipSync            │  Optional, composable utilities
+│  L2DEventDispatcher · L2DModelConstants              │  Pure Haxe, depends only on L2DCore
+├─────────────────────────────────────────────────────┤
 │  Framework Integration                               │
-│  L2DFlixelComponent / L2DHeapsObject / ...          │
+│  L2DFlixelComponent / L2DHeapsObject / ...          │  Adapts to specific game framework
 ├─────────────────────────────────────────────────────┤
 │  Core Logic                                          │
-│  L2DCore (platform-independent)                      │
+│  L2DCore (platform-independent)                      │  Batch building, mask grouping,
+│                                                      │  vertex transform, render orchestration
 ├─────────────────────────────────────────────────────┤
 │  Backend Interfaces                                  │
-│  IL2DRenderer  ·  ICubismBridge                     │
+│  IL2DRenderer  ·  ICubismBridge                     │  Contracts for rendering & native access
 ├─────────────────────────────────────────────────────┤
 │  Backend Implementations                             │
-│  OpenFLRenderer · HeapsRenderer · HxcppWindowsBridge│
+│  OpenFLRenderer · HeapsRenderer · HxcppWindowsBridge│  Platform-specific code
 │                            · HlWindowsBridge         │
 └─────────────────────────────────────────────────────┘
          ↕ ICubismBridge (GetProcAddress/dlopen/...)
     live2d_capi.dll/.so/.dylib → Live2DCubismCore
 ```
 
-- **C++ Native Layer** (`live2d_capi.dll`): Flat C API wrapping the Cubism SDK. Only performs parameter/motion calculation, no OpenGL/DirectX rendering.
+- **Extension Layer** (v0.8+): Optional, composable utility classes (`L2DMotionQueue`, `L2DLookAt`, `L2DLipSync`, `L2DEventDispatcher`, `L2DModelConstants`) that sit above `L2DCore` and depend only on its public API. Pure Haxe, zero native changes, work across all three backends. See [Extensions (v0.8+)](#extensions-v08) below.
+- **Framework Integration Layer**: `L2DFlixelComponent` (#if flixel), `L2DHeapsObject` (#if heaps) — wraps `L2DCore` for idiomatic integration with the target game framework.
 - **Core Logic Layer** (`L2DCore`): Platform-independent batch building, mask grouping, vertex transformation, and render orchestration.
 - **Backend Interfaces** (`IL2DRenderer`, `ICubismBridge`): Contracts for rendering and native access, enabling multi-backend support.
 - **Backend Implementations**: `OpenFLRenderer` (drawTriangles, #if openfl), `HeapsRenderer` (h2d.Drawable + h3d.prim, #if heaps), `HxcppWindowsBridge` (GetProcAddress, #if cpp), `HlWindowsBridge` (@:hlNative, #if hl). Adding a new backend only requires implementing these two interfaces.
@@ -543,6 +549,197 @@ haxe heaps_demo.hxml
 cd bin/heaps
 hl heaps_demo.hl
 ```
+
+## Extensions (v0.8+)
+
+The Extension Layer provides high-level utilities that reduce boilerplate for common Live2D interaction patterns. All extensions are **optional** — users adopt them by constructing classes with a `L2DCore` reference. No existing API is changed.
+
+**Design principles:** zero native changes, dependency injection (receive `L2DCore`, don't inherit), interface-first for backend-specific concerns, composable, stateful `update(dt)`. See [ARCHITECTURE.md → Extension Layer (v0.8+)](./ARCHITECTURE.md#extension-layer-v08) for full design notes.
+
+### L2DMotionQueue — Priority Queue with Idle Recovery
+
+```haxe
+import live2d.cubism.ext.L2DMotionQueue;
+import live2d.cubism.ext.L2DEventDispatcher;
+
+var dispatcher = new L2DEventDispatcher(core);
+var queue = new L2DMotionQueue(core, dispatcher);
+// Note: the default native Update() already auto-plays a random Idle motion
+// when the motion queue is empty. Do NOT call enableIdleRecovery() unless you
+// have disabled the native auto-idle — otherwise the two will race and produce
+// "can't start motion" warnings.
+// queue.enableIdleRecovery("Idle", 3.0);
+
+// In update loop:
+queue.update(dt);
+
+// Triggered by user input:
+queue.enqueue("TapBody", 0, 3);  // Force: interrupt current
+queue.enqueue("Talk", 2, 2);     // Normal: queue after current
+```
+
+### L2DLookAt — Damped Mouse/Touch Follow
+
+```haxe
+import live2d.cubism.ext.L2DLookAt;
+
+var lookAt = new L2DLookAt(core);
+lookAt.followSpeed = 0.2;  // lerp coefficient, 0..1
+lookAt.deadzone = 5;       // px, prevents micro-jitter
+
+// In update loop:
+lookAt.update(dt);
+
+// On mouse move:
+lookAt.setTarget(mouseX, mouseY);
+
+// On mouse release:
+lookAt.release();  // eases back to model center
+```
+
+### L2DLipSync — Audio-Driven Mouth Sync
+
+```haxe
+import live2d.cubism.ext.L2DLipSync;
+import live2d.cubism.ext.L2DCallbackAudioSource;
+
+var source = new L2DCallbackAudioSource(() -> computeRMS());
+var lipSync = new L2DLipSync(core, source);
+lipSync.attack = 0.5;    // snappier opening
+lipSync.release = 0.15;  // slower closing
+lipSync.curve = 1.5;     // aggressive mapping
+lipSync.enable();        // disables C-side wav mode
+
+// In update loop:
+lipSync.update(dt);
+
+// To stop:
+lipSync.disable();  // reverts to wav file mode
+```
+
+### L2DEventDispatcher — Typed Event Subscription
+
+```haxe
+import live2d.cubism.ext.L2DEventDispatcher;
+
+var dispatcher = new L2DEventDispatcher(core);
+var token = dispatcher.onMotionFinished((group, no, handle) -> {
+    trace('Motion finished: $group#$no');
+});
+
+// Hit test multiple areas at once (dispatches HitTest on first hit):
+dispatcher.hitTestAreas(["Head", "Body"], clickX, clickY);
+
+// Unsubscribe later:
+dispatcher.off(token);
+```
+
+### L2DModelConstants — Compile-Time Constants from model3.json
+
+```haxe
+import live2d.cubism.ext.L2DModelConstants;
+
+@:build(live2d.cubism.ext.L2DModelConstants.build('assets/live2d/Haru/Haru.model3.json'))
+class HaruConstants {}
+
+// Now you have compile-time constants:
+l2d.startMotion(HaruConstants.Motions.Idle, 0, 1);    // "Idle"
+l2d.hitTest(HaruConstants.HitAreas.Head, x, y);        // "Head"
+l2d.setExpression(HaruConstants.Expressions.F01);      // "F01"
+// HaruConstants.Motions.Idel  // compile error: prevents typo
+```
+
+### InputAdapter — Unified Input Across Backends
+
+The `IL2DInputAdapter` interface normalizes mouse/touch events from different frameworks into unified `(x, y)` callbacks. Three built-in implementations:
+
+| Adapter | Backend | Style | Note |
+| --- | --- | --- | --- |
+| `L2DOpenFLInputAdapter` | OpenFL | Event-based | Takes a `Sprite` in constructor |
+| `L2DFlixelInputAdapter` | Flixel | Polling-based | Call `adapter.update()` in `FlxState.update` |
+| `L2DHeapsInputAdapter` | Heaps | Event-based | Uses `hxd.Window.addEventTarget` |
+
+```haxe
+import live2d.cubism.ext.heaps.L2DHeapsInputAdapter;
+
+var adapter = new L2DHeapsInputAdapter();
+adapter.bindMove((x, y) -> lookAt.setTarget(x, y));
+adapter.bindDown((x, y) -> dispatcher.hitTestAreas(["Head", "Body"], x, y));
+// On cleanup:
+adapter.dispose();
+```
+
+### Extension Layer API Reference
+
+#### L2DMotionQueue
+
+| Property/Method | Description |
+| --- | --- |
+| `hasActiveMotion` | Whether a motion is currently playing (read-only) |
+| `pendingCount` | Number of motions waiting in queue (read-only) |
+| `onMotionBegan` | Dynamic callback `(group, no, handle) -> Void` |
+| `onMotionFinished` | Dynamic callback `(group, no, handle) -> Void` |
+| `onQueueEmpty` | Dynamic callback `() -> Void` |
+| `new(core, ?dispatcher)` | Construct with L2DCore and optional event dispatcher |
+| `enqueue(group, no=0, priority=2)` | Enqueue a motion. Priority: 1=Idle, 2=Normal, 3=Force. Returns `MotionHandle` |
+| `clear()` | Clear queue and forget current motion (does NOT stop C-side) |
+| `enableIdleRecovery(group="Idle", delay=3.0)` | Auto-play random idle motion after delay. **Warning:** do NOT use with the default native auto-idle (enabled in `LAppModel_CalcOnly::Update`) — the two will race |
+| `disableIdleRecovery()` | Disable idle recovery |
+| `update(dt)` | Poll current motion completion, advance queue, trigger idle recovery |
+
+#### L2DLookAt
+
+| Property/Method | Description |
+| --- | --- |
+| `followSpeed` | Lerp coefficient (0..1), default 0.2. Frame-rate-independent |
+| `deadzone` | Deadzone radius in pixels, default 5.0 |
+| `homeX`, `homeY` | Return-to-center target (defaults to `core.x`/`core.y`) |
+| `new(core)` | Construct with L2DCore |
+| `setTarget(?x, ?y)` | Set look-at target. Pass null to release |
+| `release()` | Release target — eases back to home |
+| `pause()` / `resume()` | Temporarily stop/resume applying updates |
+| `snapToTarget()` | Jump current directly to target (skip easing) |
+| `update(dt)` | Main loop update — writes to `core.setDragging` |
+
+#### L2DLipSync
+
+| Property/Method | Description |
+| --- | --- |
+| `enabled` | Whether controller is driving `setLipSyncValue` (read-only) |
+| `current` | Current smoothed mouth open amount (read-only) |
+| `attack` | Opening speed coefficient (0..1), default 0.4 |
+| `release` | Closing speed coefficient (0..1), default 0.2 |
+| `curve` | Volume-to-mouth mapping exponent, default 1.5 |
+| `maxValue` | Maximum mouth open value, default 1.0 |
+| `new(core, source)` | Construct with L2DCore and `IL2DAudioSource` |
+| `enable()` | Take over lip sync from C-side wav mode |
+| `disable()` | Revert to wav file handler mode |
+| `update(dt)` | Main loop update — writes to `core.setLipSyncValue` |
+
+#### L2DEventDispatcher
+
+| Property/Method | Description |
+| --- | --- |
+| `new(core)` | Construct with L2DCore |
+| `onMotionBegan(cb)` / `onMotionFinished(cb)` | Subscribe to motion events, returns token |
+| `onExpressionSet(cb)` / `onHitTest(cb)` | Subscribe to expression/hit events, returns token |
+| `onIdleRecovery(cb)` / `onQueueEmpty(cb)` | Subscribe to queue events, returns token |
+| `off(token)` | Cancel a subscription by token |
+| `clear()` | Remove all listeners |
+| `dispatch(event)` | Dispatch an `L2DEvent` (used by extensions) |
+| `notifyExpressionSet(id)` | Convenience: dispatch `ExpressionSet(id)` |
+| `hitTestAreas(areas, x, y)` | Hit test multiple areas, dispatch `HitTest` on first hit. Returns Bool |
+
+#### L2DModelConstants (macro)
+
+| Usage | Description |
+| --- | --- |
+| `@:build(L2DModelConstants.build('path/to/Model.model3.json'))` | Apply to an empty class to generate constants |
+| `MyConstants.Motions.GroupName` | Motion group name (compile-time string) |
+| `MyConstants.Expressions.Name` | Expression name |
+| `MyConstants.HitAreas.Name` | Hit area name |
+| `MyConstants.Groups.Name` | Parameter group name (EyeBlink, LipSync, ...) |
+| `MyConstants.Textures` | Array of texture paths (runtime `Array<String>`) |
 
 ## API Reference
 

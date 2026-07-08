@@ -4,10 +4,14 @@
 
 live2d-haxe uses a **CalcOnly** architecture: the C++ native layer handles all computation (physics, animation, poses, expressions, etc.) while the Haxe layer handles all rendering. This separation allows the core logic to be platform-independent.
 
-## Four-Layer Architecture
+## Five-Layer Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
+│  Extension Layer (v0.8+)                             │
+│  L2DMotionQueue · L2DLookAt · L2DLipSync            │  Optional, composable utilities
+│  L2DEventDispatcher · L2DModelConstants              │  Pure Haxe, depends only on L2DCore
+├─────────────────────────────────────────────────────┤
 │  Framework Integration Layer                         │
 │  L2DFlixelComponent / L2DHeapsObject / ...          │  Adapts to specific game framework
 ├─────────────────────────────────────────────────────┤
@@ -28,6 +32,22 @@ live2d-haxe uses a **CalcOnly** architecture: the C++ native layer handles all c
 
 ```
 live2d.cubism
+├── ext/                     # Extension Layer (v0.8+) — cross-backend utilities
+│   ├── L2DEvent.hx          # Event enum (6 variants)
+│   ├── L2DEventDispatcher.hx  # Typed callback dispatcher with token unsubscribe
+│   ├── L2DMotionQueue.hx    # Motion priority queue + idle recovery
+│   ├── L2DLookAt.hx         # Damped mouse → head/eye follow
+│   ├── L2DLipSync.hx        # Audio-driven lip sync with attack/release
+│   ├── IL2DAudioSource.hx   # Audio amplitude interface
+│   ├── L2DCallbackAudioSource.hx  # Callback-based IL2DAudioSource
+│   ├── L2DModelConstants.hx # @:build macro: model3.json → compile-time constants
+│   ├── IL2DInputAdapter.hx  # Input adapter interface
+│   ├── openfl/
+│   │   └── L2DOpenFLInputAdapter.hx  # MouseEvent adapter (#if openfl)
+│   ├── flixel/
+│   │   └── L2DFlixelInputAdapter.hx  # FlxG.mouse polling adapter (#if flixel)
+│   └── heaps/
+│       └── L2DHeapsInputAdapter.hx   # hxd.Stage event adapter (#if heaps)
 ├── core/                    # Platform-agnostic core
 │   ├── L2DModel.hx          # Model handle type (#if cpp)
 │   ├── ICubismBridge.hx     # Native bridge interface (46 methods)
@@ -125,3 +145,51 @@ L2DCore
 9. **Moc version checking** — `hasMocConsistency()` checks moc3 files against the current Core before loading, preventing silent crashes on incompatible models
 10. **Dual-target native bridge** — cpp target uses inline `untyped __cpp__()` with `@:cppFileCode` for DLL loading; HL target uses `.hdll` native extension with `@:hlNative` bindings, keeping the same ICubismBridge interface contract. Both delegate to the same `live2d_capi.dll` at runtime
 11. **Heaps backend (v0.7.0)** — `HeapsRenderer` implements `IL2DRenderer` on HL target using `h2d.Drawable` + `h3d.prim.Primitive` (8-float RawFormat vertices: x, y, u, v, r, g, b, a). `CubismHeapsShader` (hxsl, priority=200) runs before `Base2d.fragment()` (priority=100) to modify `pixelColor` for mask/color/opacity. `L2DHeapsObject` extends `h2d.Object` and auto-updates+renders in `sync(ctx)` via `hxd.Timer.dt`. Mask RT uses `RenderContext.pushTarget`/`popTarget` with a dedicated `CubismMaskShader` (solid-color fill, RGB channel packing per mask group). **Blend mode difference**: Heaps `BlendMode.Alpha` is non-premultiplied (`SrcAlpha, OneMinusSrcAlpha`) while OpenFL uses premultiplied (`One, OneMinusSrcAlpha`) — opacity is applied as alpha-only scaling in Heaps (`pixelColor.a *= u_opacity`) vs RGBA scaling in OpenFL (`gl_FragColor *= u_opacity`).
+12. **Extension Layer (v0.8.0)** — Optional, composable utility classes (`L2DMotionQueue`, `L2DLookAt`, `L2DLipSync`, `L2DEventDispatcher`, `L2DModelConstants`) sit above `L2DCore` and depend only on its public API. All extensions are pure Haxe, zero native changes, and work across all three backends. Backend-specific concerns (audio amplitude, input events) are abstracted behind `IL2DAudioSource` and `IL2DInputAdapter` interfaces, following the same interface-first pattern as `IL2DRenderer`/`ICubismBridge`. Extensions use dependency injection (receive `L2DCore` in constructor) rather than inheritance, preserving existing wrapper APIs.
+
+## Extension Layer (v0.8+)
+
+The Extension Layer provides high-level utilities that reduce boilerplate for common Live2D interaction patterns. All extensions are **optional** — users adopt them by constructing classes with a `L2DCore` reference. No existing API is changed.
+
+### Design Principles
+
+1. **Zero native changes** — Extensions use only existing C API (`startMotion`, `isMotionFinished`, `setDragging`, `setLipSyncValue`, `hitTest`)
+2. **Dependency injection** — Extensions receive `L2DCore` in constructor, don't inherit it
+3. **Interface-first** — Backend-specific concerns abstracted behind `IL2DAudioSource` / `IL2DInputAdapter`
+4. **Composable** — Each extension is independent; users mix-and-match as needed
+5. **Stateful `update(dt)`** — Extensions manage their own state, user calls `update(dt)` in main loop
+
+### Extensions
+
+| Extension | Purpose | Native Dependency |
+|-----------|---------|-------------------|
+| `L2DMotionQueue` | Priority queue + idle recovery + completion callbacks | `startMotion`, `isMotionFinished`, `startIdleMotion` |
+| `L2DLookAt` | Damped mouse → head/eye follow with deadzone + auto-return | `setDragging` |
+| `L2DLipSync` | Audio → mouth sync with attack/release smoothing | `setLipSyncValue`, `setLipSyncEnabled` |
+| `L2DEventDispatcher` | Typed event subscription with token unsubscribe | `hitTest` (for `hitTestAreas`) |
+| `L2DModelConstants` | `@:build` macro: model3.json → compile-time constants | None (pure macro) |
+
+### Abstraction Interfaces
+
+- **`IL2DAudioSource`** — `getAmplitude():Float`. Default impl: `L2DCallbackAudioSource` (wraps `() -> Float`). Backend-specific AudioSources (wav decode + RMS) deferred to v0.9.
+- **`IL2DInputAdapter`** — `bindMove/bindDown/bindUp(callback)`, `dispose()`. Three implementations: `L2DOpenFLInputAdapter` (event-based), `L2DFlixelInputAdapter` (polling-based, requires `adapter.update()`), `L2DHeapsInputAdapter` (event-based).
+
+### Usage Example
+
+```haxe
+var dispatcher = new L2DEventDispatcher(core);
+var motionQueue = new L2DMotionQueue(core, dispatcher);
+motionQueue.enableIdleRecovery("Idle", 3.0);
+var lookAt = new L2DLookAt(core);
+
+dispatcher.onMotionFinished((group, no, handle) -> trace('Done: $group#$no'));
+
+// In update loop:
+motionQueue.update(dt);
+lookAt.update(dt);
+
+// On input:
+lookAt.setTarget(mouseX, mouseY);
+motionQueue.enqueue("TapBody", 0, 3);  // Force priority
+dispatcher.hitTestAreas(["Head", "Body"], clickX, clickY);
+```

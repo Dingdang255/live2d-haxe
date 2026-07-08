@@ -7,9 +7,20 @@ import flixel.math.FlxPoint;
 import live2d.cubism.flixel.L2DFlixelComponent;
 import live2d.cubism.flixel.L2DFlixelManager;
 import live2d.cubism.L2DCore;
+import live2d.cubism.ext.L2DEventDispatcher;
+import live2d.cubism.ext.L2DLookAt;
+import live2d.cubism.ext.L2DMotionQueue;
+
+// Compile-time model constants — sub-types of the ModelConstants module.
+import ModelConstants.HaruModelConstants;
+import ModelConstants.HiyoriModelConstants;
+import ModelConstants.MaoModelConstants;
+import ModelConstants.MarkModelConstants;
+import ModelConstants.NatoriModelConstants;
+import ModelConstants.RiceModelConstants;
 
 /**
- * Demo state showing basic Live2D Cubism usage with Flixel.
+ * Demo state showing Live2D Cubism usage with Flixel + v0.8 Extension Layer.
  *
  * Controls:
  *   - Click on model hit areas to trigger motions
@@ -34,6 +45,15 @@ class L2DDemoState extends FlxState
     var dragging:Bool = false;
     var dragOffset:FlxPoint;
 
+    var dispatcher:L2DEventDispatcher;
+    var motionQueue:L2DMotionQueue;
+    var lookAt:L2DLookAt;
+
+    /** Hit area names for the current model (from compile-time constants). */
+    var currentHitAreas:Array<String> = [];
+    /** TapBody motion group name for the current model, or null if the model has none. */
+    var currentTapBodyGroup:String = null;
+
     override public function create()
     {
         super.create();
@@ -42,14 +62,15 @@ class L2DDemoState extends FlxState
 
         // Info text
         infoText = new FlxText(10, 10, FlxG.width - 20,
-            'Live2D Haxe Demo v0.5\n'
+            'Live2D Haxe Demo v0.8\n'
             + 'Click: Hit test + motion\n'
             + 'Hold mouse: Eye tracking\n'
             + 'Ctrl + drag: Move model\n'
             + 'Wheel: Scale (Shift=fast)\n'
             + 'E: Expression | M: Motion\n'
             + 'B: Breath | P: Physics | L: LipSync\n'
-            + 'LEFT/RIGHT: Switch model'
+            + 'LEFT/RIGHT: Switch model\n'
+            + 'Extensions: MotionQueue + LookAt + EventDispatcher'
         );
         infoText.setFormat(null, 14, 0xFFFFFFFF);
         add(infoText);
@@ -83,6 +104,51 @@ class L2DDemoState extends FlxState
             FlxG.addChildBelowMouse(l2d.getSprite());
             l2d.startIdleMotion();
 
+            // Recreate extensions bound to the new core
+            dispatcher = new L2DEventDispatcher(l2d.core);
+            motionQueue = new L2DMotionQueue(l2d.core, dispatcher);
+            // Note: native Update() already auto-plays random Idle when motion queue
+            // is empty, so we do NOT call motionQueue.enableIdleRecovery() here —
+            // enabling it would race with the native auto-idle and produce
+            // "can't start motion" warnings. motionQueue is used only for
+            // sequencing user-triggered motions (e.g. TapBody).
+            lookAt = new L2DLookAt(l2d.core);
+
+            dispatcher.onMotionFinished((group, no, handle) -> {
+                trace('[FlixelDemo] Motion finished: $group#$no');
+            });
+            dispatcher.onHitTest((area, x, y) -> {
+                trace('[FlixelDemo] Hit: $area @ ($x, $y)');
+            });
+
+            // Select compile-time constants for the current model.
+            // Each *ModelConstants class is @:build-generated from the model's
+            // model3.json, so field names are checked at compile time.
+            switch (modelName)
+            {
+                case 'Haru':
+                    currentHitAreas = [HaruModelConstants.HitAreas.Head, HaruModelConstants.HitAreas.Body];
+                    currentTapBodyGroup = HaruModelConstants.Motions.TapBody;
+                case 'Hiyori':
+                    currentHitAreas = [HiyoriModelConstants.HitAreas.Body];
+                    currentTapBodyGroup = HiyoriModelConstants.Motions.TapBody;
+                case 'Mao':
+                    currentHitAreas = [MaoModelConstants.HitAreas.Head, MaoModelConstants.HitAreas.Body];
+                    currentTapBodyGroup = MaoModelConstants.Motions.TapBody;
+                case 'Mark':
+                    currentHitAreas = [];
+                    currentTapBodyGroup = null;
+                case 'Natori':
+                    currentHitAreas = [NatoriModelConstants.HitAreas.Head, NatoriModelConstants.HitAreas.Body];
+                    currentTapBodyGroup = NatoriModelConstants.Motions.TapBody;
+                case 'Rice':
+                    currentHitAreas = [RiceModelConstants.HitAreas.Body];
+                    currentTapBodyGroup = RiceModelConstants.Motions.TapBody;
+                default:
+                    currentHitAreas = [];
+                    currentTapBodyGroup = null;
+            }
+
             statusText.text = 'Model: $modelName | Scale: ${l2d.scale:.1f} | Bounds: ${l2d.modelWidth} x ${l2d.modelHeight}';
         }
         else
@@ -111,49 +177,46 @@ class L2DDemoState extends FlxState
 
         if (l2d == null || l2d.model.isNull()) return;
 
-        // Eye tracking - set dragging BEFORE update so current frame responds
-        if (FlxG.mouse.pressed && !FlxG.keys.pressed.CONTROL)
-        {
-            l2d.setDragging(FlxG.mouse.x, FlxG.mouse.y);
-        }
-        else
-        {
-            l2d.setDragging(l2d.x, l2d.y);
-        }
+        var mx = FlxG.mouse.x;
+        var my = FlxG.mouse.y;
+        var ctrlDown = FlxG.keys.pressed.CONTROL;
 
-        // Update and render
-        L2DFlixelManager.updateAll(elapsed);
-        L2DFlixelManager.renderAll();
-
-        // Hit test on click
-        if (FlxG.mouse.justPressed && !FlxG.keys.pressed.CONTROL)
-        {
-            var areas = ['Head', 'Body', 'Hair'];
-            for (area in areas)
-            {
-                if (l2d.hitTest(area, FlxG.mouse.x, FlxG.mouse.y))
-                {
-                    trace('[Demo] Hit: $area');
-                    l2d.startMotion('TapBody', 0, 3);
-                    break;
-                }
-            }
-        }
-
-        // Ctrl + drag: move model position
-        if (FlxG.mouse.justPressed && FlxG.keys.pressed.CONTROL)
+        // Ctrl + press: begin dragging model position
+        if (FlxG.mouse.justPressed && ctrlDown)
         {
             dragging = true;
-            dragOffset.set(l2d.x - FlxG.mouse.x, l2d.y - FlxG.mouse.y);
+            dragOffset.set(l2d.x - mx, l2d.y - my);
         }
         if (dragging && FlxG.mouse.pressed)
         {
-            l2d.x = dragOffset.x + FlxG.mouse.x;
-            l2d.y = dragOffset.y + FlxG.mouse.y;
+            l2d.x = dragOffset.x + mx;
+            l2d.y = dragOffset.y + my;
         }
         if (FlxG.mouse.justReleased)
         {
             dragging = false;
+        }
+
+        // Eye tracking: when left button held without Ctrl, follow mouse; else release to home
+        if (FlxG.mouse.pressed && !ctrlDown)
+        {
+            lookAt.setTarget(mx, my);
+        }
+        else
+        {
+            lookAt.release();
+        }
+
+        // Click (no Ctrl): hit test via dispatcher, enqueue TapBody on hit
+        if (FlxG.mouse.justPressed && !ctrlDown)
+        {
+            if (currentHitAreas.length > 0 && dispatcher.hitTestAreas(currentHitAreas, mx, my))
+            {
+                if (currentTapBodyGroup != null)
+                {
+                    motionQueue.enqueue(currentTapBodyGroup, 0, 3);
+                }
+            }
         }
 
         // Mouse wheel: scale
@@ -166,7 +229,7 @@ class L2DDemoState extends FlxState
             statusText.text = 'Model: ${modelList[currentModelIndex]} | Scale: ${l2d.scale:.1f}';
         }
 
-        // Keyboard
+        // Keyboard actions
         #if FLX_KEYBOARD
         if (FlxG.keys.justPressed.E)
         {
@@ -174,7 +237,10 @@ class L2DDemoState extends FlxState
         }
         if (FlxG.keys.justPressed.M)
         {
-            l2d.startMotion('TapBody', 0, 3);
+            if (currentTapBodyGroup != null)
+            {
+                motionQueue.enqueue(currentTapBodyGroup, 0, 3);
+            }
         }
         // Framework behavior toggles
         if (FlxG.keys.justPressed.B)
@@ -193,6 +259,16 @@ class L2DDemoState extends FlxState
             statusText.text = 'LipSync: ${l2d.core.lipSyncEnabled}';
         }
         #end
+
+        // Update extensions BEFORE native update so setDragging/StartMotion land
+        // before core.update(dt) reads them. Order: motionQueue polls completion
+        // (may start pending motions) → lookAt writes setDragging → native update.
+        if (motionQueue != null) motionQueue.update(elapsed);
+        if (lookAt != null) lookAt.update(elapsed);
+
+        // Update and render
+        L2DFlixelManager.updateAll(elapsed);
+        L2DFlixelManager.renderAll();
     }
 
     override public function destroy()

@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-07-07
+
+### v0.8.0 — Extension Layer (cross-backend upper-layer extensions)
+
+**One-line:** Add a fifth "Extension Layer" above L2DCore with 5 cross-backend extensions (MotionQueue, LookAt, LipSync, EventDispatcher, ModelConstants macro) + 2 abstraction interfaces (IL2DAudioSource, IL2DInputAdapter) + 3 backend InputAdapters, reducing boilerplate for "talking, responsive, mouse-following" characters. Zero native changes, all backends supported.
+
+**Full description:**
+
+This release introduces the Extension Layer — a set of optional, composable utility classes that sit above `L2DCore` and below the framework integration layer. All extensions are pure Haxe, depend only on `L2DCore`'s public API, and work across all three backends (OpenFL/Flixel/Heaps) without modification. Backend-specific concerns (audio amplitude, input events) are abstracted behind small interfaces (`IL2DAudioSource`, `IL2DInputAdapter`) that community backends can implement.
+
+- **L2DMotionQueue** — Priority queue for motions with idle recovery. Force(3) interrupts current, Normal(2) queues, Idle(1) only when empty. Polls `CubismAPI.isMotionFinished` and auto-advances the queue. Optional idle recovery plays a random motion from an "Idle" group after a configurable delay.
+- **L2DLookAt** — Damped mouse/touch → head/eye follow. Frame-rate-independent lerp (`1 - pow(1 - speed, dt*60)`), deadzone to prevent micro-jitter, auto-return to model center when no target is set. Wraps `L2DCore.setDragging`.
+- **L2DLipSync** — Audio-driven mouth sync with attack/release smoothing and curve mapping. Reads amplitude from `IL2DAudioSource`, applies `pow(raw, curve) * maxValue`, eases with separate attack (opening) and release (closing) coefficients, writes to `L2DCore.setLipSyncValue`. `enable()` disables C-side wav mode to avoid conflict; `disable()` reverts.
+- **L2DEventDispatcher** — Typed callback subscription (one method per event variant) with token-based unsubscribe. Events: `MotionBegan`, `MotionFinished`, `ExpressionSet`, `HitTest`, `IdleRecovery`, `QueueEmpty`. Includes `hitTestAreas()` convenience for batch hit testing.
+- **L2DModelConstants** — `@:build` macro that parses `.model3.json` at compile time and generates `public static inline var` constants for motion groups, expressions, hit areas, parameter groups, and textures. Prevents string typos: `HaruConstants.Motions.Idel` fails to compile.
+- **IL2DAudioSource** — Interface for audio amplitude measurement. `L2DCallbackAudioSource` wraps a user-supplied `() -> Float` getter as the default implementation. Backend-specific AudioSources (wav decode + RMS) deferred to v0.9.
+- **IL2DInputAdapter** — Interface for input event normalization. Three implementations: `L2DOpenFLInputAdapter` (event-based, MouseEvent), `L2DFlixelInputAdapter` (polling-based, FlxG.mouse, requires `adapter.update()` call), `L2DHeapsInputAdapter` (event-based, hxd.Stage).
+- **No breaking changes** — All extensions are optional, independent classes. Existing `L2DFlixelComponent`, `L2DHeapsObject`, `L2DCore`, `ICubismBridge`, `IL2DRenderer`, and native code are unchanged. Users adopt extensions by constructing them with a `L2DCore` reference.
+
+---
+
+### v0.8.0 — 扩展层（跨后端上层扩展）
+
+**一行描述：** 在 L2DCore 之上新增第五层"扩展层"，包含 5 个跨后端扩展（MotionQueue、LookAt、LipSync、EventDispatcher、ModelConstants 宏）+ 2 个抽象接口（IL2DAudioSource、IL2DInputAdapter）+ 3 个后端输入适配器，大幅减少"会说话、会响应、会跟手"角色的样板代码。零 native 改动，三后端通吃。
+
+**完整描述：**
+
+本版本引入扩展层——一组可选、可组合的工具类，位于 `L2DCore` 之上、框架集成层之下。所有扩展均为纯 Haxe 实现，只依赖 `L2DCore` 的 public API，无需修改即可在三个后端（OpenFL/Flixel/Heaps）上使用。后端特定差异（音频取样、输入事件）通过小接口（`IL2DAudioSource`、`IL2DInputAdapter`）抽象，社区后端可自行实现。
+
+- **L2DMotionQueue** — 动作优先级队列，支持空闲恢复。Force(3) 立即打断当前动作，Normal(2) 排队，Idle(1) 仅在队列空时入队。轮询 `CubismAPI.isMotionFinished` 并自动推进队列。可选空闲恢复在队列空超过配置延迟后自动播放 "Idle" 组的随机动作。
+- **L2DLookAt** — 阻尼式鼠标/触摸 → 头部/眼睛跟随。帧率无关 lerp（`1 - pow(1 - speed, dt*60)`），死区防止微抖，无目标时自动回中。封装 `L2DCore.setDragging`。
+- **L2DLipSync** — 音频驱动的口型同步，支持 attack/release 平滑和曲线映射。从 `IL2DAudioSource` 读取音量，应用 `pow(raw, curve) * maxValue`，用独立的 attack（张嘴）和 release（合嘴）系数做缓动，写入 `L2DCore.setLipSyncValue`。`enable()` 关闭 C 侧 wav 模式避免冲突；`disable()` 恢复。
+- **L2DEventDispatcher** — 类型化回调订阅（每个事件变体一个方法）+ token 取消订阅。事件：`MotionBegan`、`MotionFinished`、`ExpressionSet`、`HitTest`、`IdleRecovery`、`QueueEmpty`。包含 `hitTestAreas()` 批量 hit test 便捷方法。
+- **L2DModelConstants** — `@:build` 宏，在编译期解析 `.model3.json` 并生成 `public static inline var` 常量，覆盖动作组、表情、hit area、参数组和纹理。防止字符串 typo：`HaruConstants.Motions.Idel` 编译失败。
+- **IL2DAudioSource** — 音频音量测量接口。`L2DCallbackAudioSource` 包装用户提供的 `() -> Float` getter 作为默认实现。后端专用 AudioSource（wav 解码 + RMS）留待 v0.9。
+- **IL2DInputAdapter** — 输入事件统一化接口。三个实现：`L2DOpenFLInputAdapter`（事件式，MouseEvent）、`L2DFlixelInputAdapter`（轮询式，FlxG.mouse，需调 `adapter.update()`）、`L2DHeapsInputAdapter`（事件式，hxd.Stage）。
+- **无破坏性变更** — 所有扩展均为可选独立类。现有 `L2DFlixelComponent`、`L2DHeapsObject`、`L2DCore`、`ICubismBridge`、`IL2DRenderer` 和 native 代码均不变。用户通过构造扩展类并传入 `L2DCore` 引用即可使用。
+
 ## [0.7.0] - 2026-07-07
 
 ### v0.7.0 — Heaps engine backend support

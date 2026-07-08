@@ -16,6 +16,7 @@
 #include <Model/CubismMoc.hpp>
 #include <fstream>
 #include <vector>
+#include <unordered_map>
 #include <LAppDefine.hpp>  // For LAppDefine::CubismLoggingLevel
 #include <cstring>
 #include <cstdio>
@@ -150,25 +151,48 @@ L2D_API void l2d_set_parameter_value(L2D_Model m, int index, float value, float 
 
 // ===== Animation =====
 
+// CubismMotionQueueEntryHandle is `void*` (64-bit on x64): each entry stores
+// `this` pointer as its handle. The Haxe side passes handles as 32-bit Int,
+// so a direct cast truncates the high 32 bits and IsFinished() can never
+// match the entry — it always returns true ("finished"). We therefore map
+// 64-bit native handles to 32-bit IDs at this boundary.
+static std::unordered_map<int32_t, CubismMotionQueueEntryHandle> g_motionHandleMap;
+static int32_t g_nextMotionHandleId = 1;
+
 L2D_API intptr_t l2d_start_motion(L2D_Model m, const char* group, int no, int priority)
 {
     if (m == NULL || group == NULL) return -1;
     CubismMotionQueueEntryHandle handle = GetModel(m)->StartMotion(group, no, priority);
-    return reinterpret_cast<intptr_t>(handle);
+    if (handle == InvalidMotionQueueEntryHandleValue) return -1;
+    int32_t id = g_nextMotionHandleId++;
+    g_motionHandleMap[id] = handle;
+    return static_cast<intptr_t>(id);
 }
 
 L2D_API intptr_t l2d_start_random_motion(L2D_Model m, const char* group, int priority)
 {
     if (m == NULL || group == NULL) return -1;
     CubismMotionQueueEntryHandle handle = GetModel(m)->StartRandomMotion(group, priority);
-    return reinterpret_cast<intptr_t>(handle);
+    if (handle == InvalidMotionQueueEntryHandleValue) return -1;
+    int32_t id = g_nextMotionHandleId++;
+    g_motionHandleMap[id] = handle;
+    return static_cast<intptr_t>(id);
 }
 
 L2D_API bool l2d_is_motion_finished(L2D_Model m, intptr_t motionHandle)
 {
     if (m == NULL) return true;
-    CubismMotionQueueEntryHandle handle = reinterpret_cast<CubismMotionQueueEntryHandle>(motionHandle);
-    return GetModel(m)->IsMotionFinished(handle);
+    int32_t id = static_cast<int32_t>(motionHandle);
+    if (id <= 0) return true;
+    auto it = g_motionHandleMap.find(id);
+    if (it == g_motionHandleMap.end()) return true;
+    CubismMotionQueueEntryHandle handle = it->second;
+    bool finished = GetModel(m)->IsMotionFinished(handle);
+    if (finished)
+    {
+        g_motionHandleMap.erase(it);
+    }
+    return finished;
 }
 
 // ===== Expression =====

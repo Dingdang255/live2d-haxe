@@ -22,10 +22,6 @@ test/assets/live2d/*
 # Archives
 *.zip
 
-# Automation Scripts
-*.bat
-*.sh
-
 # Haxe
 *.n
 haxelib.json.bak

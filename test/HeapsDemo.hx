@@ -7,7 +7,19 @@ import hxd.App;
 import hxd.Key;
 import hxd.Window;
 import hxd.res.DefaultFont;
+import live2d.cubism.ext.L2DEventDispatcher;
+import live2d.cubism.ext.L2DLookAt;
+import live2d.cubism.ext.L2DMotionQueue;
+import live2d.cubism.ext.heaps.L2DHeapsInputAdapter;
 import live2d.cubism.heaps.L2DHeapsObject;
+
+// Compile-time model constants — sub-types of the ModelConstants module.
+import ModelConstants.HaruModelConstants;
+import ModelConstants.HiyoriModelConstants;
+import ModelConstants.MaoModelConstants;
+import ModelConstants.MarkModelConstants;
+import ModelConstants.NatoriModelConstants;
+import ModelConstants.RiceModelConstants;
 
 /**
  * Heaps Demo for Live2D Cubism.
@@ -40,6 +52,25 @@ class HeapsDemo extends App
     var dragOffsetX:Float = 0;
     var dragOffsetY:Float = 0;
 
+    var dispatcher:L2DEventDispatcher;
+    var motionQueue:L2DMotionQueue;
+    var lookAt:L2DLookAt;
+
+    /** Event-based mouse input adapter (demonstrates IL2DInputAdapter). */
+    var input:L2DHeapsInputAdapter;
+    /** Whether the left mouse button is currently held (tracked from adapter events). */
+    var mouseDown:Bool = false;
+    /** Whether Ctrl was held when the current press began (distinguishes drag vs. follow). */
+    var mouseDownCtrl:Bool = false;
+    /** Last mouse position from adapter (stage coords), consumed in update(). */
+    var lastMouseX:Float = 0;
+    var lastMouseY:Float = 0;
+
+    /** Hit area names for the current model (from compile-time constants). */
+    var currentHitAreas:Array<String> = [];
+    /** TapBody motion group name for the current model, or null if the model has none. */
+    var currentTapBodyGroup:String = null;
+
     static function main()
     {
         new HeapsDemo();
@@ -55,19 +86,57 @@ class HeapsDemo extends App
         infoText.textColor = 0xFFFFFFFF;
         infoText.x = 8;
         infoText.y = 8;
-        infoText.text = 'Live2D Haxe - Heaps Demo v0.7\n'
+        infoText.text = 'Live2D Haxe - Heaps Demo v0.8\n'
             + 'Click: Hit test + motion\n'
             + 'Hold mouse: Eye tracking\n'
             + 'Ctrl + drag: Move model\n'
             + 'Wheel: Scale (Shift=fast)\n'
             + 'E: Expression | M: Motion\n'
             + 'B: Breath | P: Physics | L: LipSync\n'
-            + 'LEFT/RIGHT: Switch model';
+            + 'LEFT/RIGHT: Switch model\n'
+            + 'Extensions: MotionQueue + LookAt + EventDispatcher + InputAdapter';
 
         statusText = new Text(font, s2d);
         statusText.textColor = 0xFFCCCCCC;
         statusText.x = 8;
         statusText.y = 160;
+
+        // Event-based mouse input via IL2DInputAdapter (Heaps implementation).
+        // Keyboard input still uses hxd.Key polling — the adapter only normalizes
+        // pointer events, demonstrating how to decouple input collection from
+        // L2D logic (the same callbacks could feed L2DLookAt/L2DEventDispatcher
+        // on any backend by swapping the adapter implementation).
+        input = new L2DHeapsInputAdapter();
+        input.bindDown((x, y) -> {
+            mouseDown = true;
+            mouseDownCtrl = Key.isDown(Key.CTRL);
+            lastMouseX = x;
+            lastMouseY = y;
+            if (l2d == null || !l2d.model.notNull()) return;
+            if (mouseDownCtrl)
+            {
+                // Begin dragging
+                dragging = true;
+                dragOffsetX = l2d.core.x - x;
+                dragOffsetY = l2d.core.y - y;
+            }
+            else
+            {
+                // Click (no Ctrl): hit test via dispatcher, enqueue TapBody on hit
+                if (currentHitAreas.length > 0 && dispatcher.hitTestAreas(currentHitAreas, x, y))
+                {
+                    if (currentTapBodyGroup != null) motionQueue.enqueue(currentTapBodyGroup, 0, 3);
+                }
+            }
+        });
+        input.bindUp((x, y) -> {
+            mouseDown = false;
+            dragging = false;
+        });
+        input.bindMove((x, y) -> {
+            lastMouseX = x;
+            lastMouseY = y;
+        });
 
         loadModel(currentModelIndex);
     }
@@ -93,6 +162,52 @@ class HeapsDemo extends App
             l2d.core.y = s2d.height / 2;
             l2d.core.scale = (s2d.height * 0.8) / l2d.modelHeight;
             l2d.startIdleMotion();
+
+            // Recreate extensions bound to the new core
+            dispatcher = new L2DEventDispatcher(l2d.core);
+            motionQueue = new L2DMotionQueue(l2d.core, dispatcher);
+            // Note: native Update() already auto-plays random Idle when motion queue
+            // is empty, so we do NOT call motionQueue.enableIdleRecovery() here —
+            // enabling it would race with the native auto-idle and produce
+            // "can't start motion" warnings. motionQueue is used only for
+            // sequencing user-triggered motions (e.g. TapBody).
+            lookAt = new L2DLookAt(l2d.core);
+
+            dispatcher.onMotionFinished((group, no, handle) -> {
+                trace('[HeapsDemo] Motion finished: $group#$no');
+            });
+            dispatcher.onHitTest((area, x, y) -> {
+                trace('[HeapsDemo] Hit: $area @ ($x, $y)');
+            });
+
+            // Select compile-time constants for the current model.
+            // Each *ModelConstants class is @:build-generated from the model's
+            // model3.json, so field names are checked at compile time.
+            switch (modelName)
+            {
+                case 'Haru':
+                    currentHitAreas = [HaruModelConstants.HitAreas.Head, HaruModelConstants.HitAreas.Body];
+                    currentTapBodyGroup = HaruModelConstants.Motions.TapBody;
+                case 'Hiyori':
+                    currentHitAreas = [HiyoriModelConstants.HitAreas.Body];
+                    currentTapBodyGroup = HiyoriModelConstants.Motions.TapBody;
+                case 'Mao':
+                    currentHitAreas = [MaoModelConstants.HitAreas.Head, MaoModelConstants.HitAreas.Body];
+                    currentTapBodyGroup = MaoModelConstants.Motions.TapBody;
+                case 'Mark':
+                    currentHitAreas = [];
+                    currentTapBodyGroup = null;
+                case 'Natori':
+                    currentHitAreas = [NatoriModelConstants.HitAreas.Head, NatoriModelConstants.HitAreas.Body];
+                    currentTapBodyGroup = NatoriModelConstants.Motions.TapBody;
+                case 'Rice':
+                    currentHitAreas = [RiceModelConstants.HitAreas.Body];
+                    currentTapBodyGroup = RiceModelConstants.Motions.TapBody;
+                default:
+                    currentHitAreas = [];
+                    currentTapBodyGroup = null;
+            }
+
             updateStatus('Model: $modelName | Scale: ${l2d.core.scale:.2f} | ${l2d.modelWidth}x${l2d.modelHeight}');
             trace('[HeapsDemo] Loaded $modelName: ${l2d.modelWidth}x${l2d.modelHeight}, scale=${l2d.core.scale}');
         }
@@ -127,50 +242,26 @@ class HeapsDemo extends App
 
         if (l2d == null || !l2d.model.notNull()) return;
 
-        var mx = s2d.mouseX;
-        var my = s2d.mouseY;
-        var ctrlDown = Key.isDown(Key.CTRL);
+        var mx = lastMouseX;
+        var my = lastMouseY;
 
-        // Ctrl + press: begin dragging model position
-        if (Key.isPressed(Key.MOUSE_LEFT) && ctrlDown)
-        {
-            dragging = true;
-            dragOffsetX = l2d.core.x - mx;
-            dragOffsetY = l2d.core.y - my;
-        }
-        if (dragging && Key.isDown(Key.MOUSE_LEFT))
+        // Dragging: when a Ctrl+press began a drag, follow the mouse position
+        // (lastMouseX/Y are kept current by the adapter's bindMove callback).
+        if (dragging)
         {
             l2d.core.x = dragOffsetX + mx;
             l2d.core.y = dragOffsetY + my;
         }
-        if (!Key.isDown(Key.MOUSE_LEFT))
-        {
-            dragging = false;
-        }
 
-        // Eye tracking: when left button held without Ctrl, track mouse; else return to center
-        if (Key.isDown(Key.MOUSE_LEFT) && !ctrlDown)
+        // Eye tracking: when left button held without Ctrl, follow mouse; else release to home.
+        // (mouseDown/mouseDownCtrl are tracked from the adapter's bindDown/bindUp events.)
+        if (mouseDown && !mouseDownCtrl)
         {
-            l2d.setDragging(mx, my);
+            lookAt.setTarget(mx, my);
         }
         else
         {
-            l2d.setDragging(l2d.core.x, l2d.core.y);
-        }
-
-        // Click (no Ctrl): hit test
-        if (Key.isPressed(Key.MOUSE_LEFT) && !ctrlDown)
-        {
-            var areas = ['Head', 'Body', 'Hair'];
-            for (area in areas)
-            {
-                if (l2d.hitTest(area, mx, my))
-                {
-                    trace('[HeapsDemo] Hit: $area');
-                    l2d.startMotion('TapBody', 0, 3);
-                    break;
-                }
-            }
+            lookAt.release();
         }
 
         // Mouse wheel: scale (Key.MOUSE_WHEEL_UP = zoom out, DOWN = zoom in per Heaps convention)
@@ -196,7 +287,10 @@ class HeapsDemo extends App
         }
         if (Key.isPressed(Key.M))
         {
-            l2d.startMotion('TapBody', 0, 3);
+            if (currentTapBodyGroup != null)
+            {
+                motionQueue.enqueue(currentTapBodyGroup, 0, 3);
+            }
         }
         if (Key.isPressed(Key.B))
         {
@@ -213,6 +307,10 @@ class HeapsDemo extends App
             l2d.setLipSyncEnabled(!l2d.core.lipSyncEnabled);
             updateStatus('LipSync: ${l2d.core.lipSyncEnabled}');
         }
+
+        // Update extensions (order: motionQueue polls completion → lookAt writes setDragging)
+        if (motionQueue != null) motionQueue.update(dt);
+        if (lookAt != null) lookAt.update(dt);
     }
 
     override function onResize()
@@ -227,3 +325,4 @@ class HeapsDemo extends App
 }
 
 #end
+

@@ -28,24 +28,30 @@ Live2D Cubism SDK for Haxe —— 多后端渲染抽象层，基于 CalcOnly 架
 
 ```
 ┌─────────────────────────────────────────────────────┐
+│  扩展层 (v0.8+)                                      │
+│  L2DMotionQueue · L2DLookAt · L2DLipSync            │  可选、可组合的工具类
+│  L2DEventDispatcher · L2DModelConstants              │  纯 Haxe，仅依赖 L2DCore
+├─────────────────────────────────────────────────────┤
 │  框架集成层                                          │
-│  L2DFlixelComponent / L2DHeapsObject / ...          │
+│  L2DFlixelComponent / L2DHeapsObject / ...          │  适配特定游戏框架
 ├─────────────────────────────────────────────────────┤
 │  核心逻辑层                                          │
-│  L2DCore（平台无关）                                  │
+│  L2DCore（平台无关）                                  │  批处理构建、遮罩分组、
+│                                                      │  顶点变换、渲染调度
 ├─────────────────────────────────────────────────────┤
 │  后端接口层                                          │
-│  IL2DRenderer  ·  ICubismBridge                     │
+│  IL2DRenderer  ·  ICubismBridge                     │  渲染与原生访问契约
 ├─────────────────────────────────────────────────────┤
 │  后端实现层                                          │
-│  OpenFLRenderer · HeapsRenderer · HxcppWindowsBridge│
+│  OpenFLRenderer · HeapsRenderer · HxcppWindowsBridge│  平台特定代码
 │                            · HlWindowsBridge         │
 └─────────────────────────────────────────────────────┘
          ↕ ICubismBridge (GetProcAddress/dlopen/...)
     live2d_capi.dll/.so/.dylib → Live2DCubismCore
 ```
 
-- **C++ 原生层**（`live2d_capi.dll`）：封装 Cubism SDK 的扁平 C API。仅执行参数/动作计算，不做 GPU 渲染。
+- **扩展层**（v0.8+）：可选、可组合的工具类（`L2DMotionQueue`、`L2DLookAt`、`L2DLipSync`、`L2DEventDispatcher`、`L2DModelConstants`），位于 `L2DCore` 之上，仅依赖其 public API。纯 Haxe，零 native 改动，三后端通吃。详见下方[扩展层 (v0.8+)](#扩展层-v08)。
+- **框架集成层**：`L2DFlixelComponent`（#if flixel）、`L2DHeapsObject`（#if heaps）—— 将 `L2DCore` 包装为目标游戏框架的惯用集成形式。
 - **核心逻辑层**（`L2DCore`）：平台无关的批处理构建、遮罩分组、顶点变换和渲染调度。
 - **后端接口层**（`IL2DRenderer`、`ICubismBridge`）：渲染和原生访问的契约接口，支持多后端。
 - **后端实现层**：`OpenFLRenderer`（drawTriangles，#if openfl）、`HeapsRenderer`（h2d.Drawable + h3d.prim，#if heaps）、`HxcppWindowsBridge`（GetProcAddress，#if cpp）、`HlWindowsBridge`（@:hlNative，#if hl）。添加新后端只需实现这两个接口。
@@ -543,6 +549,196 @@ haxe heaps_demo.hxml
 cd bin/heaps
 hl heaps_demo.hl
 ```
+
+## 扩展层 (v0.8+)
+
+扩展层提供高层工具类，减少常见 Live2D 交互模式的样板代码。所有扩展均为**可选**——用户通过传入 `L2DCore` 引用构造扩展类即可使用。不改变任何现有 API。
+
+**设计原则：** 零 native 改动、依赖注入（接收 `L2DCore`，不继承）、接口优先（后端特定差异抽象为接口）、可组合、有状态 `update(dt)`。完整设计说明见 [ARCHITECTURE.md → Extension Layer (v0.8+)](./ARCHITECTURE.md#extension-layer-v08)。
+
+### L2DMotionQueue — 优先级队列与空闲恢复
+
+```haxe
+import live2d.cubism.ext.L2DMotionQueue;
+import live2d.cubism.ext.L2DEventDispatcher;
+
+var dispatcher = new L2DEventDispatcher(core);
+var queue = new L2DMotionQueue(core, dispatcher);
+// 注意：默认的 native Update() 在动作队列为空时已会自动播放随机 Idle。
+// 除非你已禁用 native 自动 idle，否则不要调用 enableIdleRecovery()——
+// 两者会争抢动作槽位，产生 "can't start motion" 警告。
+// queue.enableIdleRecovery("Idle", 3.0);
+
+// 在 update 循环中：
+queue.update(dt);
+
+// 由用户输入触发：
+queue.enqueue("TapBody", 0, 3);  // Force：立即打断当前
+queue.enqueue("Talk", 2, 2);     // Normal：排队等候
+```
+
+### L2DLookAt — 阻尼式鼠标/触摸跟随
+
+```haxe
+import live2d.cubism.ext.L2DLookAt;
+
+var lookAt = new L2DLookAt(core);
+lookAt.followSpeed = 0.2;  // lerp 系数，0..1
+lookAt.deadzone = 5;       // 像素，防止微抖
+
+// 在 update 循环中：
+lookAt.update(dt);
+
+// 鼠标移动时：
+lookAt.setTarget(mouseX, mouseY);
+
+// 鼠标松开时：
+lookAt.release();  // 缓动回到模型中心
+```
+
+### L2DLipSync — 音频驱动的口型同步
+
+```haxe
+import live2d.cubism.ext.L2DLipSync;
+import live2d.cubism.ext.L2DCallbackAudioSource;
+
+var source = new L2DCallbackAudioSource(() -> computeRMS());
+var lipSync = new L2DLipSync(core, source);
+lipSync.attack = 0.5;    // 张嘴更快
+lipSync.release = 0.15;  // 合嘴更慢
+lipSync.curve = 1.5;     // 激进映射
+lipSync.enable();        // 关闭 C 侧 wav 模式
+
+// 在 update 循环中：
+lipSync.update(dt);
+
+// 停止：
+lipSync.disable();  // 恢复 wav 文件模式
+```
+
+### L2DEventDispatcher — 类型化事件订阅
+
+```haxe
+import live2d.cubism.ext.L2DEventDispatcher;
+
+var dispatcher = new L2DEventDispatcher(core);
+var token = dispatcher.onMotionFinished((group, no, handle) -> {
+    trace('动作完成: $group#$no');
+});
+
+// 一次批量命中测试多个区域（首个命中触发 HitTest 事件）：
+dispatcher.hitTestAreas(["Head", "Body"], clickX, clickY);
+
+// 之后取消订阅：
+dispatcher.off(token);
+```
+
+### L2DModelConstants — 从 model3.json 生成编译期常量
+
+```haxe
+import live2d.cubism.ext.L2DModelConstants;
+
+@:build(live2d.cubism.ext.L2DModelConstants.build('assets/live2d/Haru/Haru.model3.json'))
+class HaruConstants {}
+
+// 现在你拥有编译期常量：
+l2d.startMotion(HaruConstants.Motions.Idle, 0, 1);    // "Idle"
+l2d.hitTest(HaruConstants.HitAreas.Head, x, y);        // "Head"
+l2d.setExpression(HaruConstants.Expressions.F01);      // "F01"
+// HaruConstants.Motions.Idel  // 编译错误：防止 typo
+```
+
+### InputAdapter — 跨后端统一输入
+
+`IL2DInputAdapter` 接口将不同框架的鼠标/触摸事件统一为 `(x, y)` 回调。三个内置实现：
+
+| 适配器 | 后端 | 风格 | 备注 |
+| --- | --- | --- | --- |
+| `L2DOpenFLInputAdapter` | OpenFL | 事件式 | 构造函数接收 `Sprite` |
+| `L2DFlixelInputAdapter` | Flixel | 轮询式 | 需在 `FlxState.update` 中调 `adapter.update()` |
+| `L2DHeapsInputAdapter` | Heaps | 事件式 | 使用 `hxd.Window.addEventTarget` |
+
+```haxe
+import live2d.cubism.ext.heaps.L2DHeapsInputAdapter;
+
+var adapter = new L2DHeapsInputAdapter();
+adapter.bindMove((x, y) -> lookAt.setTarget(x, y));
+adapter.bindDown((x, y) -> dispatcher.hitTestAreas(["Head", "Body"], x, y));
+// 清理时：
+adapter.dispose();
+```
+
+### 扩展层 API 参考
+
+#### L2DMotionQueue
+
+| 属性/方法 | 说明 |
+| --- | --- |
+| `hasActiveMotion` | 是否有动作正在播放（只读） |
+| `pendingCount` | 等待中的动作数量（只读） |
+| `onMotionBegan` | 动态回调 `(group, no, handle) -> Void` |
+| `onMotionFinished` | 动态回调 `(group, no, handle) -> Void` |
+| `onQueueEmpty` | 动态回调 `() -> Void` |
+| `new(core, ?dispatcher)` | 用 L2DCore 和可选的事件分发器构造 |
+| `enqueue(group, no=0, priority=2)` | 入队动作。优先级：1=Idle, 2=Normal, 3=Force。返回 `MotionHandle` |
+| `clear()` | 清空队列并遗忘当前动作（不会停止 C 侧动作） |
+| `enableIdleRecovery(group="Idle", delay=3.0)` | 延迟后自动播放随机空闲动作。**警告：** 不要与 native 自动 idle（`LAppModel_CalcOnly::Update` 中默认启用）同时使用——两者会争抢 |
+| `disableIdleRecovery()` | 关闭空闲恢复 |
+| `update(dt)` | 轮询当前动作完成状态、推进队列、触发空闲恢复 |
+
+#### L2DLookAt
+
+| 属性/方法 | 说明 |
+| --- | --- |
+| `followSpeed` | lerp 系数 (0..1)，默认 0.2。帧率无关 |
+| `deadzone` | 死区半径（像素），默认 5.0 |
+| `homeX`, `homeY` | 回中目标（默认为 `core.x`/`core.y`） |
+| `new(core)` | 用 L2DCore 构造 |
+| `setTarget(?x, ?y)` | 设置跟随目标。传 null 释放 |
+| `release()` | 释放目标——缓动回 home |
+| `pause()` / `resume()` | 暂停/恢复应用更新 |
+| `snapToTarget()` | 直接跳到目标（跳过缓动） |
+| `update(dt)` | 主循环更新——写入 `core.setDragging` |
+
+#### L2DLipSync
+
+| 属性/方法 | 说明 |
+| --- | --- |
+| `enabled` | 是否正在驱动 `setLipSyncValue`（只读） |
+| `current` | 当前平滑后的张嘴量（只读） |
+| `attack` | 张嘴速度系数 (0..1)，默认 0.4 |
+| `release` | 合嘴速度系数 (0..1)，默认 0.2 |
+| `curve` | 音量到张嘴的映射指数，默认 1.5 |
+| `maxValue` | 最大张嘴值，默认 1.0 |
+| `new(core, source)` | 用 L2DCore 和 `IL2DAudioSource` 构造 |
+| `enable()` | 从 C 侧 wav 模式接管口型同步 |
+| `disable()` | 恢复 wav 文件处理模式 |
+| `update(dt)` | 主循环更新——写入 `core.setLipSyncValue` |
+
+#### L2DEventDispatcher
+
+| 属性/方法 | 说明 |
+| --- | --- |
+| `new(core)` | 用 L2DCore 构造 |
+| `onMotionBegan(cb)` / `onMotionFinished(cb)` | 订阅动作事件，返回 token |
+| `onExpressionSet(cb)` / `onHitTest(cb)` | 订阅表情/命中事件，返回 token |
+| `onIdleRecovery(cb)` / `onQueueEmpty(cb)` | 订阅队列事件，返回 token |
+| `off(token)` | 通过 token 取消订阅 |
+| `clear()` | 移除所有监听器 |
+| `dispatch(event)` | 派发 `L2DEvent`（扩展内部使用） |
+| `notifyExpressionSet(id)` | 便捷方法：派发 `ExpressionSet(id)` |
+| `hitTestAreas(areas, x, y)` | 批量命中测试，首个命中触发 `HitTest`。返回 Bool |
+
+#### L2DModelConstants（宏）
+
+| 用法 | 说明 |
+| --- | --- |
+| `@:build(L2DModelConstants.build('path/to/Model.model3.json'))` | 应用到空类以生成常量 |
+| `MyConstants.Motions.GroupName` | 动作组名（编译期字符串） |
+| `MyConstants.Expressions.Name` | 表情名 |
+| `MyConstants.HitAreas.Name` | 命中区域名 |
+| `MyConstants.Groups.Name` | 参数组名（EyeBlink、LipSync 等） |
+| `MyConstants.Textures` | 纹理路径数组（运行时 `Array<String>`） |
 
 ## API 参考
 

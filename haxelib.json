@@ -4,9 +4,9 @@
   "license": "MIT",
   "tags": ["live2d", "cubism", "openfl", "flixel", "heaps", "cpp", "hl", "native", "multi-backend"],
   "description": "Live2D Cubism SDK for Haxe - GPU shader rendering with multi-backend abstraction (cpp + hl, OpenFL/Flixel/Heaps)",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "classPath": "src",
-  "releasenote": "v0.7.0: Heaps 1.9.1 backend support. New HeapsRenderer (IL2DRenderer impl) + L2DHeapsObject (h2d.Object wrapper) + CubismHeapsShader (mask + Multiply/Screen color + opacity via hxsl). HL target only. No breaking changes to existing OpenFL/Flixel backends.",
+  "releasenote": "v0.8.0: Extension Layer — 5 cross-backend extensions (L2DMotionQueue, L2DLookAt, L2DLipSync, L2DEventDispatcher, L2DModelConstants macro) + IL2DAudioSource/IL2DInputAdapter interfaces + 3 backend InputAdapters (OpenFL/Flixel/Heaps). Zero native changes, all backends supported. No breaking changes to existing APIs.",
   "contributors": ["Dingdang255"],
   "dependencies": {
     "hxcpp": "4.2.1"
