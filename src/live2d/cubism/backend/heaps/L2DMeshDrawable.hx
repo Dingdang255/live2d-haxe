@@ -24,8 +24,9 @@ import hxd.IndexBuffer;
  * and only Base2d's texture sampling applies — matching the semantics of
  * IL2DRenderer.drawTexturedTriangles.
  *
- * Vertex buffer is rebuilt per update for Stage 1 simplicity. Stage 4 will
- * switch to Dynamic buffer + uploadVector for better throughput.
+ * Vertex buffer uses a grow-only Dynamic buffer: GPU buffers are reused across
+ * frames and reallocated only when capacity is insufficient. uploadVector
+ * uploads in place, avoiding per-frame dispose+realloc overhead.
  */
 class L2DMeshDrawable extends Drawable
 {
@@ -97,9 +98,10 @@ class L2DMeshDrawable extends Drawable
  * Simple Primitive that holds one triangle list with 8-float stride
  * (x, y, u, v, r, g, b, a) and RawFormat.
  *
- * For Stage 1, buffer is reallocated whenever data changes. This is
- * correct but not optimal; Stage 4 will replace with a persistent
- * Dynamic buffer + uploadVector.
+ * Uses a grow-only Dynamic buffer: GPU buffers are reused across frames
+ * and reallocated only when capacity is insufficient. `uploadVector`
+ * uploads in place, and `render` passes an explicit `drawTri` to limit
+ * rendering to the active index range.
  */
 class MeshPrimitive extends Primitive
 {
@@ -109,6 +111,8 @@ class MeshPrimitive extends Primitive
     var indexData:IndexBuffer;
     var dirty:Bool = false;
     var allocated:Bool = false;
+    var currentVertCount:Int = 0;
+    var currentIdxCount:Int = 0;
 
     public function new()
     {
@@ -152,7 +156,8 @@ class MeshPrimitive extends Primitive
         dirty = true;
     }
 
-    /** Reallocate GPU buffers if data has changed. Called from L2DMeshDrawable.sync. */
+    /** Upload vertex/index data to GPU. Grow-only: buffers are reused across frames
+        and reallocated only when capacity is insufficient. Called from L2DMeshDrawable.sync. */
     public function flush():Void
     {
         if (!dirty) return;
@@ -160,23 +165,25 @@ class MeshPrimitive extends Primitive
 
         var vertCount = Std.int(vertexData.length / STRIDE);
         var idxCount = indexData.length;
+        currentVertCount = vertCount;
+        currentIdxCount = idxCount;
 
-        if (buffer != null && !buffer.isDisposed())
+        // Buffer: grow-only — reallocate only when capacity insufficient
+        if (buffer == null || buffer.isDisposed() || buffer.vertices < vertCount)
         {
-            buffer.dispose();
-            buffer = null;
+            if (buffer != null && !buffer.isDisposed()) buffer.dispose();
+            // RawFormat = map buffer directly to shader inputs (no pos/normal/uv prefix assumption)
+            // Dynamic = optimized for frequent re-upload (streaming)
+            buffer = new Buffer(vertCount, STRIDE, [h3d.BufferFlag.RawFormat, h3d.BufferFlag.Dynamic]);
         }
-        if (indexes != null && !indexes.isDisposed())
-        {
-            indexes.dispose();
-            indexes = null;
-        }
-
-        // RawFormat = map buffer directly to shader inputs (no pos/normal/uv prefix assumption)
-        buffer = new Buffer(vertCount, STRIDE, [h3d.BufferFlag.RawFormat]);
         buffer.uploadVector(vertexData, 0, vertCount);
 
-        indexes = new Indexes(idxCount);
+        // Indexes: grow-only — reallocate only when capacity insufficient
+        if (indexes == null || indexes.isDisposed() || indexes.count < idxCount)
+        {
+            if (indexes != null && !indexes.isDisposed()) indexes.dispose();
+            indexes = new Indexes(idxCount);
+        }
         indexes.upload(indexData, 0, idxCount);
 
         dirty = false;
@@ -188,6 +195,24 @@ class MeshPrimitive extends Primitive
         flush();
     }
 
+    /** Force GPU buffer reallocation on next flush. Disposes current buffers
+        so the next group using shared primitive gets a fresh allocation,
+        preventing GPU data races when multiple groups reuse the same primitive. */
+    public function invalidateBuffer():Void
+    {
+        if (buffer != null && !buffer.isDisposed())
+        {
+            buffer.dispose();
+            buffer = null;
+        }
+        if (indexes != null && !indexes.isDisposed())
+        {
+            indexes.dispose();
+            indexes = null;
+        }
+        dirty = true;
+    }
+
     override function render(engine:Engine):Void
     {
         if (vertexData.length == 0) return;
@@ -196,7 +221,10 @@ class MeshPrimitive extends Primitive
             flush();
         }
         if (buffer == null || indexes == null) return;
-        engine.renderIndexed(buffer, indexes);
+        // Pass explicit drawTri to limit rendering to uploaded indices only —
+        // buffer/indexes may be over-allocated (grow-only), so without this,
+        // stale garbage indices beyond currentIdxCount would be rendered.
+        engine.renderIndexed(buffer, indexes, 0, Std.int(currentIdxCount / 3));
     }
 
     override function dispose():Void
@@ -231,6 +259,8 @@ class MeshPrimitive extends Primitive
         }
         dirty = false;
         allocated = false;
+        currentVertCount = 0;
+        currentIdxCount = 0;
     }
 }
 

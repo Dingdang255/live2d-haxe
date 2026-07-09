@@ -22,19 +22,30 @@ import live2d.cubism.L2DCore;
  * `_lipSyncEnabled` first, then `_useExternalLipSync` to decide whether
  * to use the external value or the wav file handler.
  *
- * Usage:
+ * Usage (with backend AudioSource — recommended for real audio):
  * ```haxe
- * var source = new L2DCallbackAudioSource(() -> computeRMS());
+ * var source = new L2DHeapsAudioSource(sound);  // or L2DOpenFLAudioSource / L2DFlixelAudioSource
  * var lipSync = new L2DLipSync(core, source);
  * lipSync.attack = 0.5;   // snappier opening
  * lipSync.release = 0.15; // slower closing
  * lipSync.enable();
+ * source.play();
  *
- * // in update loop:
- * lipSync.update(dt);
+ * // in update loop (TWO steps — order matters):
+ * source.update(dt);      // sync WAV position from backend playback
+ * lipSync.update(dt);     // reads getAmplitude() → drives mouth
  *
  * // to stop:
+ * source.stop();
  * lipSync.disable();  // reverts to wav file mode
+ * ```
+ *
+ * Usage (with callback source — no audio file needed):
+ * ```haxe
+ * var source = new L2DCallbackAudioSource(() -> computeRMS());
+ * var lipSync = new L2DLipSync(core, source);
+ * lipSync.enable();
+ * lipSync.update(dt);  // callback source needs no separate update()
  * ```
  */
 class L2DLipSync

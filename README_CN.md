@@ -28,11 +28,13 @@ Live2D Cubism SDK for Haxe —— 多后端渲染抽象层，基于 CalcOnly 架
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  扩展层 (v0.8+, v0.9 扩展)                            │
+│  扩展层 (v0.8+, v0.9 & v1.0 扩展)                    │
 │  L2DMotionQueue · L2DLookAt · L2DLipSync            │  可选、可组合的工具类
 │  L2DEventDispatcher · L2DModelConstants              │  纯 Haxe，仅依赖 L2DCore
 │  L2DParts · FlxL2DGroup · L2DWavFileAudioSource      │  v0.9: Parts DSL + 多模型组
 │  L2DDebugOverlay · CLI                               │  + 调试覆盖层 + haxelib run CLI
+│  L2DAudioSourceBase · Heaps/FL/OpenFL AudioSource    │  v1.0: LipSync 后端特化
+│  L2DHeapsObject: 热重载 · filter chain               │  v1.0: Heaps DX 神器组合
 ├─────────────────────────────────────────────────────┤
 │  框架集成层                                          │
 │  L2DFlixelComponent / L2DHeapsObject / ...          │  适配特定游戏框架
@@ -52,7 +54,7 @@ Live2D Cubism SDK for Haxe —— 多后端渲染抽象层，基于 CalcOnly 架
     live2d_capi.dll/.so/.dylib → Live2DCubismCore
 ```
 
-- **扩展层**（v0.8+, v0.9 扩展）：可选、可组合的工具类，位于 `L2DCore` 之上，仅依赖其 public API。v0.8 提供 `L2DMotionQueue`、`L2DLookAt`、`L2DLipSync`、`L2DEventDispatcher`、`L2DModelConstants`（纯 Haxe，零 native 改动）。v0.9 新增 `L2DParts`（链式 DSL + tween）、`FlxL2DGroup`（多模型聚合）、`L2DWavFileAudioSource`（纯 Haxe WAV 解码 + RMS）、`L2DDebugOverlay`（Heaps+OpenFL）、`live2d.CLI` `haxelib run` 工具，以及 native 端 motion UserData 事件桥接（需要重新编译 native）。详见下方[扩展层 (v0.8+, v0.9 扩展)](#扩展层-v08-v09-扩展)。
+- **扩展层**（v0.8+, v0.9 & v1.0 扩展）：可选、可组合的工具类，位于 `L2DCore` 之上，仅依赖其 public API。v0.8 提供 `L2DMotionQueue`、`L2DLookAt`、`L2DLipSync`、`L2DEventDispatcher`、`L2DModelConstants`（纯 Haxe，零 native 改动）。v0.9 新增 `L2DParts`（链式 DSL + tween）、`FlxL2DGroup`（多模型聚合）、`L2DWavFileAudioSource`（纯 Haxe WAV 解码 + RMS）、`L2DDebugOverlay`（Heaps+OpenFL）、`live2d.CLI` `haxelib run` 工具，以及 native 端 motion UserData 事件桥接（需要重新编译 native）。v1.0 新增 `L2DAudioSourceBase` + 三个后端 `AudioSource` 子类（由实时播放位置驱动 LipSync），以及 `L2DHeapsObject` 上的两项 Heaps 专属 DX 工具：stat-mtime 热重载和 `h2d.filter.Group` 链式 API。详见下方[扩展层 (v0.8+, v0.9 扩展)](#扩展层-v08-v09-扩展)。
 - **框架集成层**：`L2DFlixelComponent`（#if flixel）、`L2DHeapsObject`（#if heaps）—— 将 `L2DCore` 包装为目标游戏框架的惯用集成形式。
 - **核心逻辑层**（`L2DCore`）：平台无关的批处理构建、遮罩分组、顶点变换和渲染调度。
 - **后端接口层**（`IL2DRenderer`、`ICubismBridge`）：渲染和原生访问的契约接口，支持多后端。
@@ -893,6 +895,70 @@ adapter.bindDown((x, y) -> dispatcher.hitTestAreas(["Head", "Body"], x, y));
 // 清理时：
 adapter.dispose();
 ```
+
+### Heaps 热重载 (v1.0, 仅 Heaps)
+
+`L2DHeapsObject.hotReloadEnabled` 开启 sync() 内的 stat-mtime 轮询。开启后监听 model3.json、同名 `.moc3`、以及 `FileReferences.Physics`/`Pose`/`Expressions[].File` 路径。任一 mtime 变更时执行 construct-new-then-swap：建新 `L2DCore`，校验 `model.notNull()`（探测写一半的文件），保留当前 transform（x/y/scale/alpha），销毁旧 core，重建监听列表，重启 idle motion。失败设 `reloadPending` 下帧重试。
+
+```haxe
+var l2d = new L2DHeapsObject('assets/live2d/Haru/', 'Haru.model3.json', s2d);
+l2d.hotReloadEnabled = true; // 每帧约 5 次 syscall
+// 外部编辑 Haru.moc3 / Haru.model3.json → 模型自动重载
+```
+
+> 不监听 motion3.json 和纹理（太 noisy）。无需 native 改动。
+
+### Heaps Filter 链 (v1.0, 仅 Heaps)
+
+`L2DHeapsObject` 新增四个基于 `h2d.filter.Group` 的 filter 链方法。Group 在首次 `addFilter` 时懒创建并绑定到 `this.filter`。兼容内置 `Glow`/`Blur`/`Outline`/`ColorMatrix`/`DropShadow`。mask RT（sync 阶段）与 filter（draw 阶段）时序和目标独立，互不干扰。
+
+```haxe
+import h2d.filter.Glow;
+import h2d.filter.Blur;
+import h2d.filter.Outline;
+
+l2d.addFilter(new Glow(0xFFFFFF));      // 单个 glow
+l2d.addFilter(new Blur(3.0));           // glow + blur 链
+l2d.removeFilter(glowRef);              // 移除成功返回 true
+l2d.clearFilters();                     // 移除整个 group
+var current = l2d.getFilters();         // Array<Filter> 副本
+```
+
+### 后端 AudioSource (v1.0)
+
+`L2DAudioSourceBase` 实现 `IL2DAudioSource`，组合 `L2DWavFileAudioSource`（纯 Haxe WAV 解码 + RMS）。后端子类只需在构造函数中设 `wav.positionProvider`，让 RMS 窗口跟踪后端的实时播放位置。这样 `L2DLipSync` 能直接从正在播放的音频读取振幅，而非孤立地预解码 wav。
+
+| 类 | 后端 | 播放 API | 位置单位 |
+| --- | --- | --- | --- |
+| `L2DHeapsAudioSource` | Heaps | `hxd.res.Sound` → `hxd.snd.Channel` | 秒 |
+| `L2DOpenFLAudioSource` | OpenFL | `openfl.media.Sound` → `SoundChannel` | ms（内部转秒） |
+| `L2DFlixelAudioSource` | Flixel | `FlxG.sound.load` → `FlxSound` | ms（内部转秒） |
+
+> **两步 update 规则：** `L2DLipSync.update(dt)` 只调 `source.getAmplitude()`——不调 `source.update(dt)`。你需每帧先调 `source.update(dt)` 再调 `lipSync.update(dt)`。
+
+```haxe
+import live2d.cubism.ext.heaps.L2DHeapsAudioSource;
+import live2d.cubism.ext.L2DLipSync;
+
+var sound = hxd.Res.load('audio/voice_001.wav'); // hxd.res.Sound
+var source = new L2DHeapsAudioSource(sound);
+source.play();
+var lipSync = new L2DLipSync(l2d.core, source);
+lipSync.enable();
+
+// 在 update 循环中：
+source.update(dt);    // 推进 RMS 窗口以匹配 Channel.position
+lipSync.update(dt);   // 读振幅 → 写入嘴型参数
+```
+
+### Heaps 性能优化 (v1.0)
+
+v1.0 内置三项 Heaps 优化（无 API 变更，自动生效）：
+
+- **sync 时序修复 (D1)** — `L2DHeapsObject.sync()` 现在先执行 `core.update+render` 再 `super.sync(ctx)`。h2d sync 是 top-down；旧顺序导致 `L2DMeshDrawable` 读到过时顶点计数并上传两次。现在 `draw` 只上传一次。
+- **GPU buffer 复用 (D2)** — `L2DMeshDrawable` 改用 grow-only `h3d.Buffer`（`Dynamic` + `RawFormat`），跨帧复用、仅容量增长时重分配。消除典型 130-drawable 模型的逐帧 buffer 分配。
+- **Mask RT 缓存池 (D3)** — `L2DHeapsMaskRTCache` 为每个并发模型分配独享 mask render-target；释放的 RT 按 `"WxH"` 为 key 归还池待复用。拒绝 refcount 单 RT 方案，因为并发模型会互相覆盖 mask 数据。
+- **Mask group 缓冲区隔离 (D4)** — 新增 `MeshPrimitive.invalidateBuffer()`，在 `renderMaskToBitmapData` 中为每个 mask group 强制分配独立 GPU 缓冲区。防止 OpenGL 数据竞争：group N 的 `glBufferSubData` 覆盖缓冲区时 group N−1 的 `glDrawElements` 仍在执行，导致 mask 形状渲染到错误位置（复现为右眼 mask 消失）。
 
 ### 扩展层 API 参考
 

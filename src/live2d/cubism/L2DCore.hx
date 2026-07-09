@@ -83,6 +83,11 @@ class L2DCore
     var maskScreenOffsetY:Float;
     var useShaderMask:Bool;
 
+    // Internal: track model transform changes for mask texture dirty
+    var maskLastX:Float = 0;
+    var maskLastY:Float = 0;
+    var maskLastScale:Float = -1;
+
     // Internal: display object pools
     var batchDisplayObjs:Array<L2DDisplayHandle>;
     var maskDisplayObjs:Array<L2DDisplayHandle>;
@@ -393,6 +398,13 @@ class L2DCore
         maskGroupChannelFlag = [];
         maskGroupIsInverted = [];
 
+        // DEBUG: print mask group assignments
+        var groupDrawables:Array<Array<Int>> = [for (g in 0...nextGroupId) []];
+        for (dIdx in 0...drawableCount) {
+            var g = drawableMaskGroupId[dIdx];
+            if (g >= 0) groupDrawables[g].push(dIdx);
+        }
+
         for (g in 0...maskGroupMaskIndices.length)
         {
             if (g < SHADER_MASK_MAX_GROUPS)
@@ -410,6 +422,22 @@ class L2DCore
                 }
             }
             maskGroupIsInverted.push(isInverted);
+
+            var chName = (g == 0) ? "R" : (g == 1) ? "G" : (g == 2) ? "B" : 'G$g';
+
+            // Check isInverted consistency across all drawables in this group
+            var invConsistent = true;
+            for (dIdx in 0...drawableMaskGroupId.length) {
+                if (drawableMaskGroupId[dIdx] == g) {
+                    var dInv = bridge.getDrawableInvertedMask(model, dIdx);
+                    if (dInv != isInverted) {
+                        invConsistent = false;
+                        trace('[L2D MASK WARN] group=$g ($chName) drawable=$dIdx has isInverted=$dInv (expected $isInverted from first drawable)!');
+                    }
+                }
+            }
+
+            trace('[L2D MASK] group=$g ($chName) isInverted=$isInverted consistent=$invConsistent | maskDrawIds=${maskGroupMaskIndices[g]} | maskedDrawIds=${groupDrawables[g]}');
         }
 
         trace('[L2D] Mask groups: $nextGroupId (from $drawableCount drawables)');
@@ -1049,15 +1077,13 @@ class L2DCore
                 var idxCount = cachedIdxCounts[maskDIdx];
                 if (vertCount == 0 || idxCount == 0) continue;
 
-                // Ensure vertex positions are fresh
-                // Note: do NOT set vertexDirty=false; fillVertexData manages it
-                if (vertexDirty[maskDIdx])
-                {
-                    var needVertBytes = vertCount * 2 * 4;
-                    if (vertexBuffers[maskDIdx].length < needVertBytes)
-                        vertexBuffers[maskDIdx] = Bytes.alloc(needVertBytes);
-                    bridge.getDrawableVertexPositions(model, maskDIdx, vertexBuffers[maskDIdx]);
-                }
+                // Force-refresh: mask drawables are usually invisible, so buildBatches
+                // never sets vertexDirty for them and fillVertexData never resets it,
+                // leaving vertexBuffers with stale/zero data after the first frame.
+                var needVertBytes = vertCount * 2 * 4;
+                if (vertexBuffers[maskDIdx].length < needVertBytes)
+                    vertexBuffers[maskDIdx] = Bytes.alloc(needVertBytes);
+                bridge.getDrawableVertexPositions(model, maskDIdx, vertexBuffers[maskDIdx]);
 
                 var vertBuf = vertexBuffers[maskDIdx];
                 var cachedIdx = cachedIndices[maskDIdx];
@@ -1068,8 +1094,10 @@ class L2DCore
                 {
                     var vx = vertBuf.getFloat(v * 8);
                     var vy = vertBuf.getFloat(v * 8 + 4);
-                    verts.push((vx - modelCenterX) * scale + x);
-                    verts.push(-(vy - modelCenterY) * scale + y);
+                    var sx = (vx - modelCenterX) * scale + x;
+                    var sy = -(vy - modelCenterY) * scale + y;
+                    verts.push(sx);
+                    verts.push(sy);
                 }
                 for (n in 0...idxCount)
                     idxs.push(cachedIdx[n]);
@@ -1106,6 +1134,12 @@ class L2DCore
         if (useShaderMask)
         {
             maskTextureDirty = firstFrame;
+            // Detect model transform changes (x/y/scale) — mask RT must be re-rendered
+            if (!maskTextureDirty)
+            {
+                if (x != maskLastX || y != maskLastY || scale != maskLastScale)
+                    maskTextureDirty = true;
+            }
             if (!maskTextureDirty)
             {
                 for (g in 0...maskGroupMaskIndices.length)
@@ -1125,7 +1159,12 @@ class L2DCore
             }
 
             if (maskTextureDirty)
+            {
                 updateMaskTexture();
+                maskLastX = x;
+                maskLastY = y;
+                maskLastScale = scale;
+            }
         }
 
         // 3. Reset only display objects that were used last frame

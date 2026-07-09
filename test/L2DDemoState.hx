@@ -7,7 +7,9 @@ import flixel.math.FlxPoint;
 import live2d.cubism.flixel.L2DFlixelComponent;
 import live2d.cubism.flixel.L2DFlixelManager;
 import live2d.cubism.L2DCore;
+import live2d.cubism.ext.L2DCallbackAudioSource;
 import live2d.cubism.ext.L2DEventDispatcher;
+import live2d.cubism.ext.L2DLipSync;
 import live2d.cubism.ext.L2DLookAt;
 import live2d.cubism.ext.L2DMotionQueue;
 import live2d.cubism.ext.L2DParts;
@@ -30,10 +32,11 @@ import ModelConstants.RiceModelConstants;
  *   - Mouse wheel: Scale model (Shift for faster)
  *   - E: Random expression
  *   - M: Play motion
- *   - B: Toggle breath
- *   - P: Toggle physics
- *   - T: Toggle first part opacity (L2DParts chain DSL demo)
- *   - LEFT/RIGHT: Switch model
+ *   B: Toggle breath
+ *   P: Toggle physics
+ *   T: Toggle first part opacity (L2DParts chain DSL demo)
+ *   V: Toggle LipSync (synthesized amplitude demo)
+ *   LEFT/RIGHT: Switch model
  */
 class L2DDemoState extends FlxState
 {
@@ -52,6 +55,11 @@ class L2DDemoState extends FlxState
     /** Parts manager (L2DParts chain DSL + tween). */
     var parts:L2DParts;
 
+    /** LipSync controller (synthesized amplitude demo). */
+    var lipSync:L2DLipSync;
+    /** Callback audio source for LipSync demo (synthesized amplitude). */
+    var audioSource:L2DCallbackAudioSource;
+
     /** Hit area names for the current model (from compile-time constants). */
     var currentHitAreas:Array<String> = [];
     /** TapBody motion group name for the current model, or null if the model has none. */
@@ -65,7 +73,7 @@ class L2DDemoState extends FlxState
 
         // Info text
         infoText = new FlxText(10, 10, FlxG.width - 20,
-            'Live2D Haxe Demo v0.9\n'
+            'Live2D Haxe Demo v1.0\n'
             + 'Click: Hit test + motion\n'
             + 'Hold mouse: Eye tracking\n'
             + 'Ctrl + drag: Move model\n'
@@ -73,13 +81,14 @@ class L2DDemoState extends FlxState
             + 'E: Expression | M: Motion\n'
             + 'B: Breath | P: Physics\n'
             + 'T: Toggle first part (L2DParts)\n'
+            + 'V: LipSync (synth)\n'
             + 'LEFT/RIGHT: Switch model\n'
-            + 'Extensions: MotionQueue + LookAt + EventDispatcher + Parts + UserData'
+            + 'v1.0: LipSync AudioSource + GPU buffer reuse'
         );
         infoText.setFormat(null, 14, 0xFFFFFFFF);
         add(infoText);
 
-        statusText = new FlxText(10, 200, FlxG.width - 20, '');
+        statusText = new FlxText(10, 220, FlxG.width - 20, '');
         statusText.setFormat(null, 12, 0xFFCCCCCC);
         add(statusText);
 
@@ -95,6 +104,8 @@ class L2DDemoState extends FlxState
             L2DFlixelManager.destroy(l2d);
             l2d = null;
         }
+        // LipSync is bound to the old core — discard on model switch
+        if (lipSync != null) { lipSync.disable(); lipSync = null; audioSource = null; }
 
         var modelName = modelList[index];
         l2d = L2DFlixelManager.create('assets/live2d/$modelName/', '$modelName.model3.json');
@@ -287,6 +298,26 @@ class L2DDemoState extends FlxState
                 statusText.text = 'Part "${p.name}" → ${p.get() > 0.5 ? "hide" : "show"}';
             }
         }
+        if (FlxG.keys.justPressed.V)
+        {
+            // LipSync demo with synthesized amplitude (no wav file needed).
+            // To use real audio, replace with:
+            //   var source = new L2DFlixelAudioSource("assets/audio/sample.wav");
+            //   source.play();
+            //   // then in update: source.update(elapsed); lipSync.update(elapsed);
+            if (lipSync == null)
+            {
+                audioSource = new L2DCallbackAudioSource(() -> {
+                    var t = haxe.Timer.stamp();
+                    var amp = 0.3 + 0.3 * Math.sin(t * 8) + 0.1 * Math.sin(t * 23);
+                    return amp < 0 ? 0 : (amp > 1 ? 1 : amp);
+                });
+                lipSync = new L2DLipSync(l2d.core, audioSource);
+            }
+            if (lipSync.enabled) lipSync.disable();
+            else lipSync.enable();
+            statusText.text = 'LipSync (synth): ${lipSync.enabled ? "ON" : "OFF"}';
+        }
         #end
 
         // Update extensions BEFORE native update so setDragging/StartMotion land
@@ -295,6 +326,7 @@ class L2DDemoState extends FlxState
         if (motionQueue != null) motionQueue.update(elapsed);
         if (lookAt != null) lookAt.update(elapsed);
         if (parts != null) parts.update(elapsed);
+        if (lipSync != null && lipSync.enabled) lipSync.update(elapsed);
 
         // Update and render
         L2DFlixelManager.updateAll(elapsed);

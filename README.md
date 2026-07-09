@@ -28,11 +28,13 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed architecture docs and [BAC
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  Extension Layer (v0.8+, expanded in v0.9)           │
+│  Extension Layer (v0.8+, expanded in v0.9 & v1.0)    │
 │  L2DMotionQueue · L2DLookAt · L2DLipSync            │  Optional, composable utilities
 │  L2DEventDispatcher · L2DModelConstants              │  Pure Haxe, depends only on L2DCore
 │  L2DParts · FlxL2DGroup · L2DWavFileAudioSource      │  v0.9: Parts DSL + multi-model group
 │  L2DDebugOverlay · CLI                               │  + debug overlay + haxelib run CLI
+│  L2DAudioSourceBase · Heaps/FL/OpenFL AudioSource    │  v1.0: LipSync backend specialization
+│  L2DHeapsObject: hot-reload · filter chain           │  v1.0: Heaps DX combo
 ├─────────────────────────────────────────────────────┤
 │  Framework Integration                               │
 │  L2DFlixelComponent / L2DHeapsObject / ...          │  Adapts to specific game framework
@@ -52,7 +54,7 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed architecture docs and [BAC
     live2d_capi.dll/.so/.dylib → Live2DCubismCore
 ```
 
-- **Extension Layer** (v0.8+, expanded in v0.9): Optional, composable utility classes that sit above `L2DCore` and depend only on its public API. v0.8 shipped `L2DMotionQueue`, `L2DLookAt`, `L2DLipSync`, `L2DEventDispatcher`, `L2DModelConstants` (pure Haxe, zero native changes). v0.9 adds `L2DParts` (chain DSL + tween), `FlxL2DGroup` (multi-model aggregation), `L2DWavFileAudioSource` (pure Haxe WAV decode + RMS), `L2DDebugOverlay` (Heaps+OpenFL), the `live2d.CLI` `haxelib run` tool, and a native-side motion UserData event bridge (requires native rebuild). See [Extensions (v0.8+)](#extensions-v08) below.
+- **Extension Layer** (v0.8+, expanded in v0.9 & v1.0): Optional, composable utility classes that sit above `L2DCore` and depend only on its public API. v0.8 shipped `L2DMotionQueue`, `L2DLookAt`, `L2DLipSync`, `L2DEventDispatcher`, `L2DModelConstants` (pure Haxe, zero native changes). v0.9 adds `L2DParts` (chain DSL + tween), `FlxL2DGroup` (multi-model aggregation), `L2DWavFileAudioSource` (pure Haxe WAV decode + RMS), `L2DDebugOverlay` (Heaps+OpenFL), the `live2d.CLI` `haxelib run` tool, and a native-side motion UserData event bridge (requires native rebuild). v1.0 adds `L2DAudioSourceBase` + three backend `AudioSource` subclasses (LipSync driven by live playback position), and two Heaps-specific DX tools on `L2DHeapsObject`: stat-mtime hot-reload and a `h2d.filter.Group` chain API. See [Extensions (v0.8+)](#extensions-v08) below.
 - **Framework Integration Layer**: `L2DFlixelComponent` (#if flixel), `L2DHeapsObject` (#if heaps) — wraps `L2DCore` for idiomatic integration with the target game framework.
 - **Core Logic Layer** (`L2DCore`): Platform-independent batch building, mask grouping, vertex transformation, and render orchestration.
 - **Backend Interfaces** (`IL2DRenderer`, `ICubismBridge`): Contracts for rendering and native access, enabling multi-backend support.
@@ -894,6 +896,70 @@ adapter.bindDown((x, y) -> dispatcher.hitTestAreas(["Head", "Body"], x, y));
 // On cleanup:
 adapter.dispose();
 ```
+
+### Heaps Hot-reload (v1.0, Heaps only)
+
+`L2DHeapsObject.hotReloadEnabled` toggles stat-mtime polling inside `sync()`. When enabled, the object watches the model3.json, the same-name `.moc3`, and the `FileReferences.Physics`/`Pose`/`Expressions[].File` paths. On any mtime change it performs a construct-new-then-swap: builds a new `L2DCore`, validates `model.notNull()` (to detect half-written files), preserves the current transform (x/y/scale/alpha), disposes the old core, rebuilds the watch list, and restarts idle motion. Failures set `reloadPending` for a next-frame retry.
+
+```haxe
+var l2d = new L2DHeapsObject('assets/live2d/Haru/', 'Haru.model3.json', s2d);
+l2d.hotReloadEnabled = true; // poll ~5 syscalls/frame
+// Edit Haru.moc3 / Haru.model3.json externally → model reloads automatically
+```
+
+> Does not watch motion3.json or textures (too noisy). No native changes required.
+
+### Heaps Filter Chain (v1.0, Heaps only)
+
+`L2DHeapsObject` gains four filter-chain methods backed by `h2d.filter.Group`. The group is lazily created and bound to `this.filter` on the first `addFilter` call. Works with the built-in `Glow`/`Blur`/`Outline`/`ColorMatrix`/`DropShadow` filters. Mask RT (sync phase) and filters (draw phase) are temporally and target-independent, so they compose cleanly.
+
+```haxe
+import h2d.filter.Glow;
+import h2d.filter.Blur;
+import h2d.filter.Outline;
+
+l2d.addFilter(new Glow(0xFFFFFF));      // single glow
+l2d.addFilter(new Blur(3.0));           // glow + blur chain
+l2d.removeFilter(glowRef);              // returns true if removed
+l2d.clearFilters();                     // detach the whole group
+var current = l2d.getFilters();         // Array<Filter> copy
+```
+
+### Backend AudioSources (v1.0)
+
+`L2DAudioSourceBase` implements `IL2DAudioSource` by composing `L2DWavFileAudioSource` (pure-Haxe WAV decode + RMS). Backend subclasses only need to set `wav.positionProvider` in their constructor so the RMS window tracks the backend's live playback position. This lets `L2DLipSync` read amplitude from the audio that is actually playing, instead of pre-decoding a wav in isolation.
+
+| Class | Backend | Playback API | Position unit |
+| --- | --- | --- | --- |
+| `L2DHeapsAudioSource` | Heaps | `hxd.res.Sound` → `hxd.snd.Channel` | seconds |
+| `L2DOpenFLAudioSource` | OpenFL | `openfl.media.Sound` → `SoundChannel` | ms (converted → s) |
+| `L2DFlixelAudioSource` | Flixel | `FlxG.sound.load` → `FlxSound` | ms (converted → s) |
+
+> **Two-step update rule:** `L2DLipSync.update(dt)` only calls `source.getAmplitude()` — it never calls `source.update(dt)`. You must call `source.update(dt)` yourself each frame before `lipSync.update(dt)`.
+
+```haxe
+import live2d.cubism.ext.heaps.L2DHeapsAudioSource;
+import live2d.cubism.ext.L2DLipSync;
+
+var sound = hxd.Res.load('audio/voice_001.wav'); // hxd.res.Sound
+var source = new L2DHeapsAudioSource(sound);
+source.play();
+var lipSync = new L2DLipSync(l2d.core, source);
+lipSync.enable();
+
+// In update loop:
+source.update(dt);    // advance RMS window to match Channel.position
+lipSync.update(dt);   // read amplitude → write mouth param
+```
+
+### Heaps Performance Optimizations (v1.0)
+
+Three internal Heaps optimizations ship in v1.0 (no API change, automatic):
+
+- **Sync ordering fix (D1)** — `L2DHeapsObject.sync()` now runs `core.update+render` before `super.sync(ctx)`. h2d sync is top-down; the old order caused `L2DMeshDrawable` to read stale vertex counts and upload twice. Now `draw` uploads exactly once.
+- **GPU buffer reuse (D2)** — `L2DMeshDrawable` uses a grow-only `h3d.Buffer` (`Dynamic` + `RawFormat`), reused across frames and reallocated only on capacity growth. Eliminates per-frame buffer allocation for the typical 130-drawable model.
+- **Mask RT cache pool (D3)** — `L2DHeapsMaskRTCache` gives each concurrent model its own mask render-target; released RTs return to a pool keyed by `"WxH"` for reuse. A refcount single-RT was rejected because concurrent models would overwrite each other's mask data.
+- **Mask group buffer isolation (D4)** — Added `MeshPrimitive.invalidateBuffer()` to force independent GPU buffer allocation per mask group in `renderMaskToBitmapData`. Prevents an OpenGL data race where `glBufferSubData` from group N overwrites the buffer while group N−1's `glDrawElements` is in-flight, causing mask shapes to render at wrong positions (reproduced as right-eye mask disappearance).
 
 ### Extension Layer API Reference
 

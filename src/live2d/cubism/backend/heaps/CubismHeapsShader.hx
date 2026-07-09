@@ -17,7 +17,10 @@ import hxsl.Shader;
  * `pixelColor` and Base2d will write `output.color = pixelColor` with the
  * modified value.
  *
- * Vertex stage: Base2d.__init__ sets `pixelColor = texture.get(calculatedUV) * input.color`
+ * Vertex stage:
+ *   1. Base2d.__init__ sets absolutePosition, pixelColor (texture * color)
+ *   2. CubismHeapsShader.vertex: compute v_maskUV from absolutePosition
+ *   3. Base2d.vertex: transform absolutePosition to clip space
  * Fragment stage (by priority desc):
  *   1. CubismHeapsShader.fragment: apply color/mask/opacity to pixelColor
  *   2. Base2d.fragment: output.color = pixelColor
@@ -40,6 +43,16 @@ class CubismHeapsShader extends Shader
         var absolutePosition : Vec4;
         var pixelColor : Vec4;
 
+        // Explicit varying for mask UV — computed in vertex stage, interpolated in fragment.
+        // Using vertex() instead of __init__() because vertex() is guaranteed to run in the
+        // vertex stage, and absolutePosition is definitely available there (Base2d.vertex
+        // reads it). In __init__, the stage assignment depends on Linker dependency analysis.
+        @var var v_maskUV : Vec2;
+
+        function vertex() {
+            v_maskUV = (absolutePosition.xy - u_maskOffset) / u_maskScale;
+        }
+
         function fragment() {
             // Multiply/Screen color blending (only when u_useColor > 0.5)
             if (u_useColor > 0.5) {
@@ -50,8 +63,7 @@ class CubismHeapsShader extends Shader
             // Heaps BlendMode.Alpha = SrcAlpha * Src + (1-SrcA) * Dst (non-premultiplied)
             // Only scale alpha; RGB scaling would cause double-darkening during blend.
             if (u_useMask > 0.5) {
-                var maskUV = (absolutePosition.xy - u_maskOffset) / u_maskScale;
-                var clipMask = u_maskTexture.get(maskUV);
+                var clipMask = u_maskTexture.get(v_maskUV);
                 var maskVal = dot(clipMask, u_channelFlag);
                 maskVal = mix(maskVal, 1.0 - maskVal, u_isInverted);
                 pixelColor.a *= maskVal;

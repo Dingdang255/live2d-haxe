@@ -2,6 +2,50 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2026-07-09
+
+### v1.0.0 — First stable release: Heaps performance + DX combo + LipSync backend specialization
+
+**One-line:** First stable release. Heaps rendering hardened (sync ordering fix eliminates double GPU upload, grow-only Dynamic buffer reuse, mask RT cache pool for concurrent models); DX combo (stat-mtime hot-reload + `h2d.filter.Group` chain API); LipSync backend specialization (`L2DAudioSourceBase` + three backend `AudioSource` implementations driving amplitude from live playback position). No breaking changes.
+
+**Full description:**
+
+This release hardens the Heaps backend with three internal optimizations and adds two Heaps-specific DX tools plus a backend-aware LipSync audio source layer. All changes are additive — no existing API is removed or renamed. With these in place the library ships as the first stable (1.0.0) release.
+
+- **D1. Heaps sync ordering fix** — `L2DHeapsObject.sync()` reordered so `core.update(dt)` + `core.render()` run **before** `super.sync(ctx)`. h2d's `sync` is top-down (parent before children); the previous order caused `L2DMeshDrawable.sync` to read stale vertex counts, triggering a second GPU upload during `draw`. The new order ensures the mesh drawable sees the current frame's vertices during its own sync, so `draw` uploads exactly once.
+- **D2. Heaps GPU buffer reuse** — `L2DMeshDrawable` now uses a grow-only `h3d.Buffer` (`BufferFlag.Dynamic` + `BufferFlag.RawFormat`) that is reused across frames and reallocated only when capacity is insufficient. `uploadVector` uploads in place; `render` passes an explicit `drawTri` count to limit drawing to the active index range. Eliminates per-frame buffer allocation for the typical 130-drawable model.
+- **D3. Heaps Mask RT cache pool** — New `L2DHeapsMaskRTCache` with a POOL strategy: each concurrent model gets its own render-target instance; on release the RT returns to a pool keyed by `"WxH"` for future reuse. `HeapsRenderer.destroyContainer` and `renderMaskToBitmapData` now call `release`/`get` instead of alloc/dispose. A refcount single-RT approach was rejected because concurrent models would overwrite each other's mask data (sync(A) writes masks → sync(B) overwrites the RT → draw(A) samples B's masks).
+- **D4. Heaps mask group buffer isolation** — All mask groups share one reusable `maskDrawable` and its `MeshPrimitive` in `renderMaskToBitmapData`. Without isolation, group N's `updateMesh` → `glBufferSubData` overrides the GPU vertex buffer while group N−1's `glDrawElements` is still in flight, causing the GPU to render group N−1's shapes at group N's vertex positions (reproduced as disappearing right-eye mask). Fix: added `MeshPrimitive.invalidateBuffer()` that disposes the current GPU buffer, forcing a fresh allocation per group. Called between groups in `renderMaskToBitmapData` and at the end of `drawSolidTriangles` to prevent cross-call races.
+- **C1. L2DAudioSourceBase shared base** — New `ext/L2DAudioSourceBase.hx` implementing `IL2DAudioSource` by composing `L2DWavFileAudioSource`. Exposes `update(dt)`, `getAmplitude()`, `rewind()`, `currentTime`, `duration`, `looping`. Backend subclasses only need to set `wav.positionProvider` in their constructor; the base class handles WAV decoding and RMS.
+- **C2/C3/C4. Three backend AudioSources** — `ext/heaps/L2DHeapsAudioSource.hx` (`hxd.res.Sound` + `hxd.snd.Channel.position` in seconds), `ext/openfl/L2DOpenFLAudioSource.hx` (`openfl.media.Sound` + `SoundChannel.position` ms→s, with manual pause/resume since `SoundChannel` has no native pause), `ext/flixel/L2DFlixelAudioSource.hx` (`FlxSound.time` ms→s). All three let `L2DLipSync` read amplitude from the backend's currently playing audio channel instead of pre-decoding a wav.
+- **C5. LipSync docs** — `IL2DAudioSource.hx` now lists every implementation (`L2DCallbackAudioSource`, `L2DWavFileAudioSource`, `L2DAudioSourceBase` + three backend subclasses). `L2DLipSync.hx` usage example updated to the two-step pattern: `source.update(dt); lipSync.update(dt)` — because `L2DLipSync.update` only calls `source.getAmplitude()` and never calls `source.update(dt)`.
+- **A1. Heaps hot-reload** — `L2DHeapsObject.hotReloadEnabled` toggles stat-mtime polling (~5 syscalls/frame) inside `sync()`. Watches the model3.json + same-name `.moc3` + `FileReferences.Physics`/`Pose`/`Expressions[].File`. On change, `reload()` does construct-new-then-swap: builds a new `L2DCore`, checks `model.notNull()` to detect half-written files, preserves transform (x/y/scale/alpha), disposes the old core, rebuilds the watch list, and restarts idle motion. Failures set `reloadPending` for a next-frame retry.
+- **A2. Heaps filter chain API** — `L2DHeapsObject` gains `addFilter(f)`, `removeFilter(f):Bool`, `clearFilters()`, `getFilters():Array<Filter>`. Backed by `h2d.filter.Group`, lazily created and bound to `this.filter` on first `addFilter`. Works with the built-in `Glow`/`Blur`/`Outline`/`ColorMatrix`/`DropShadow` filters; mask RT (sync phase) and filters (draw phase) are temporally and target-independent, so they compose cleanly.
+- **Demos** — `HeapsDemo.hx` and `L2DDemoState.hx` add three keys: **H** toggles hot-reload, **F** cycles a 5-mode filter chain (none → glow → blur → outline → glow+blur → clear), **V** toggles LipSync driven by `L2DCallbackAudioSource` with a synthesized sine-wave amplitude (no wav file required; comments show how to swap in `L2DHeapsAudioSource`/`L2DFlixelAudioSource`).
+- **Version** — `haxelib.json` bumped 0.9.0 → 1.0.0.
+
+---
+
+### v1.0.0 — 首个稳定版：Heaps 性能 + DX 神器组合 + LipSync 后端特化
+
+**一行描述：** 首个稳定版本。Heaps 渲染加固（sync 时序修复消除双 GPU 上传、grow-only Dynamic buffer 复用、mask RT 缓存池支持并发模型）；DX 神器组合（stat-mtime 热重载 + `h2d.filter.Group` 链式 API）；LipSync 后端特化（`L2DAudioSourceBase` + 三个后端 AudioSource 实现，从实时播放位置驱动振幅）。无破坏性变更。
+
+**完整描述：**
+
+本版本通过三项内部优化加固 Heaps 后端，并新增两项 Heaps 专属 DX 工具和一层后端感知的 LipSync 音频源。所有改动都是新增——不删除、不重命名任何既有 API。补齐后作为首个稳定版（1.0.0）发布。
+
+- **D1. Heaps sync 时序修复** — `L2DHeapsObject.sync()` 重排，使 `core.update(dt)` + `core.render()` 在 `super.sync(ctx)` **之前**执行。h2d 的 `sync` 是 top-down（parent 先于 children）；旧顺序导致 `L2DMeshDrawable.sync` 读到过时的顶点计数，在 `draw` 阶段触发第二次 GPU 上传。新顺序确保 mesh drawable 在自身 sync 时看到本帧顶点，`draw` 只上传一次。
+- **D2. Heaps GPU buffer 复用** — `L2DMeshDrawable` 改用 grow-only `h3d.Buffer`（`BufferFlag.Dynamic` + `BufferFlag.RawFormat`），跨帧复用、容量不足才扩容。`uploadVector` 原地上传；`render` 传显式 `drawTri` 计数，仅绘制活跃索引范围。消除典型 130-drawable 模型的逐帧 buffer 分配。
+- **D3. Heaps Mask RT 缓存池** — 新增 `L2DHeapsMaskRTCache`，采用 POOL 策略：每个并发模型独享一个 render-target 实例；释放时 RT 按 `"WxH"` 为 key 归还池待复用。`HeapsRenderer.destroyContainer` 和 `renderMaskToBitmapData` 改调 `release`/`get` 而非 alloc/dispose。拒绝 refcount 单 RT 方案，因为并发模型会互相覆盖 mask 数据（sync(A) 写 mask → sync(B) 覆盖 RT → draw(A) 采样到 B 的 mask）。
+- **D4. Heaps mask group 缓冲区隔离** — `renderMaskToBitmapData` 中所有 mask group 共享一个可复用的 `maskDrawable` 和 `MeshPrimitive`。不隔离时，group N 的 `updateMesh` → `glBufferSubData` 会在 group N−1 的 `glDrawElements` 仍在执行时覆盖 GPU 顶点缓冲区，导致 GPU 用 group N 的顶点位置渲染 group N−1 的形状（复现为右眼 mask 消失）。修复：新增 `MeshPrimitive.invalidateBuffer()`，销毁当前 GPU 缓冲区，强制每个 group 独立分配。在 `renderMaskToBitmapData` 的 group 间和 `drawSolidTriangles` 末尾调用，防止跨调用竞争。
+- **C1. L2DAudioSourceBase 共享基类** — 新增 `ext/L2DAudioSourceBase.hx`，实现 `IL2DAudioSource`，组合 `L2DWavFileAudioSource`。暴露 `update(dt)`、`getAmplitude()`、`rewind()`、`currentTime`、`duration`、`looping`。后端子类只需在构造函数中设 `wav.positionProvider`，基类负责 WAV 解码与 RMS。
+- **C2/C3/C4. 三后端 AudioSource** — `ext/heaps/L2DHeapsAudioSource.hx`（`hxd.res.Sound` + `hxd.snd.Channel.position` 秒）、`ext/openfl/L2DOpenFLAudioSource.hx`（`openfl.media.Sound` + `SoundChannel.position` ms→s，因 `SoundChannel` 无原生 pause 故手动实现）、`ext/flixel/L2DFlixelAudioSource.hx`（`FlxSound.time` ms→s）。三者均让 `L2DLipSync` 直接从后端正在播放的音频通道读取振幅，无需预解码 wav。
+- **C5. LipSync 文档** — `IL2DAudioSource.hx` 列出全部实现（`L2DCallbackAudioSource`、`L2DWavFileAudioSource`、`L2DAudioSourceBase` + 三个后端子类）。`L2DLipSync.hx` 用法示例改为两步模式：`source.update(dt); lipSync.update(dt)`——因为 `L2DLipSync.update` 只调 `source.getAmplitude()`，不调 `source.update(dt)`。
+- **A1. Heaps 热重载** — `L2DHeapsObject.hotReloadEnabled` 开启 sync() 内的 stat-mtime 轮询（~5 syscall/frame）。监听 model3.json + 同名 `.moc3` + `FileReferences.Physics`/`Pose`/`Expressions[].File`。变更时 `reload()` 执行 construct-new-then-swap：建新 `L2DCore`，检查 `model.notNull()` 探测写一半的文件，保留 transform（x/y/scale/alpha），销毁旧 core，重建监听列表，重启 idle motion。失败设 `reloadPending` 下帧重试。
+- **A2. Heaps filter chain API** — `L2DHeapsObject` 新增 `addFilter(f)`、`removeFilter(f):Bool`、`clearFilters()`、`getFilters():Array<Filter>`。基于 `h2d.filter.Group`，首次 `addFilter` 时懒创建并绑定到 `this.filter`。兼容内置 `Glow`/`Blur`/`Outline`/`ColorMatrix`/`DropShadow`；mask RT（sync 阶段）与 filter（draw 阶段）时序和目标独立，互不干扰。
+- **Demo** — `HeapsDemo.hx` 和 `L2DDemoState.hx` 新增三键：**H** 开关热重载、**F** 循环 5 种 filter 模式（none → glow → blur → outline → glow+blur → clear）、**V** 开关由 `L2DCallbackAudioSource` 合成正弦振幅驱动的 LipSync（无需 wav 文件；注释展示如何换成 `L2DHeapsAudioSource`/`L2DFlixelAudioSource`）。
+- **版本** — `haxelib.json` 0.9.0 → 1.0.0。
+
 ## [0.9.0] - 2026-07-08
 
 ### v0.9.0 — Major update: native event bridge + Parts DSL + multi-model group + CLI

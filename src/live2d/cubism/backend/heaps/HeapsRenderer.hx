@@ -76,6 +76,12 @@ class HeapsRenderer implements IL2DRenderer
         maskDrawable.texture = whiteMaskTexture;
         maskShader = new CubismMaskShader();
         maskDrawable.addShader(maskShader);
+        // L2DMeshDrawable constructor force-adds CubismHeapsShader, but maskDrawable
+        // only needs CubismMaskShader (solid color fill). CubismHeapsShader.u_opacity
+        // defaults to 0, and its fragment runs after CubismMaskShader's (it reads
+        // pixelColor which CubismMaskShader writes), zeroing the mask shape alpha
+        // and leaving the mask RT empty. Remove it to avoid the interference.
+        maskDrawable.removeShader(maskDrawable.getCubismShader());
     }
 
     /** Lazily-created 1x1 white texture used as default mask sampler binding. */
@@ -144,7 +150,7 @@ class HeapsRenderer implements IL2DRenderer
         maskShader = null;
         if (maskRT != null)
         {
-            maskRT.dispose();
+            if (!maskRT.isDisposed()) L2DHeapsMaskRTCache.release(maskRT, maskRT.width, maskRT.height);
             maskRT = null;
         }
         if (whiteMaskTexture != null)
@@ -279,11 +285,11 @@ class HeapsRenderer implements IL2DRenderer
         maskRTOffsetX = offsetX;
         maskRTOffsetY = offsetY;
 
-        // (Re)allocate RT texture if size changed
+        // (Re)allocate RT texture if size changed — use pool to avoid alloc/dispose churn
         if (maskRT == null || maskRT.isDisposed() || maskRT.width != width || maskRT.height != height)
         {
-            if (maskRT != null && !maskRT.isDisposed()) maskRT.dispose();
-            maskRT = new Texture(width, height, [Target]);
+            if (maskRT != null && !maskRT.isDisposed()) L2DHeapsMaskRTCache.release(maskRT, maskRT.width, maskRT.height);
+            maskRT = L2DHeapsMaskRTCache.get(width, height);
         }
 
         var ctx:RenderContext = @:privateAccess container.getScene().ctx;
@@ -342,6 +348,13 @@ class HeapsRenderer implements IL2DRenderer
             maskDrawable.updateMesh(mergedVerts, mergedUVs, mergedIndices);
             maskDrawable.primitive.flush();
             @:privateAccess maskDrawable.draw(ctx);
+
+            // Force GPU buffer reallocation between groups: all groups share the
+            // same maskDrawable + primitive, so updateMesh overwrites the GPU
+            // vertex buffer. Without this, group N's glBufferSubData can corrupt
+            // group N-1's in-flight draw, causing mask shapes to render at wrong
+            // positions.
+            maskDrawable.primitive.invalidateBuffer();
         }
 
         ctx.popTarget();
@@ -488,6 +501,8 @@ class HeapsRenderer implements IL2DRenderer
         ctx.pushTarget(rt);
         @:privateAccess maskDrawable.draw(ctx);
         ctx.popTarget();
+        // Prevent GPU buffer races with renderMaskToBitmapData
+        maskDrawable.primitive.invalidateBuffer();
     }
 
     // ===== Display list =====

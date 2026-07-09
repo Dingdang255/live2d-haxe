@@ -3,11 +3,16 @@ package;
 #if heaps
 
 import h2d.Text;
+import h2d.filter.Blur;
+import h2d.filter.Glow;
+import h2d.filter.Outline;
 import hxd.App;
 import hxd.Key;
 import hxd.Window;
 import hxd.res.DefaultFont;
+import live2d.cubism.ext.L2DCallbackAudioSource;
 import live2d.cubism.ext.L2DEventDispatcher;
+import live2d.cubism.ext.L2DLipSync;
 import live2d.cubism.ext.L2DLookAt;
 import live2d.cubism.ext.L2DMotionQueue;
 import live2d.cubism.ext.L2DParts;
@@ -38,6 +43,9 @@ import ModelConstants.RiceModelConstants;
  *   M: play TapBody motion
  *   B / P / L: toggle Breath / Physics / LipSync
  *   T: toggle first part opacity (L2DParts chain DSL demo)
+ *   H: toggle hot-reload (watch model files for changes)
+ *   F: cycle filter chain (none → glow → blur → outline → glow+blur)
+ *   V: toggle LipSync (synthesized amplitude demo)
  *   LEFT / RIGHT: switch model
  */
 class HeapsDemo extends App
@@ -59,6 +67,13 @@ class HeapsDemo extends App
     var lookAt:L2DLookAt;
     /** Parts manager (L2DParts chain DSL + tween). */
     var parts:L2DParts;
+
+    /** LipSync controller (synthesized amplitude demo). */
+    var lipSync:L2DLipSync;
+    /** Callback audio source for LipSync demo (synthesized amplitude). */
+    var audioSource:L2DCallbackAudioSource;
+    /** Current filter mode (0=none, 1=glow, 2=blur, 3=outline, 4=glow+blur). */
+    var filterMode:Int = 0;
 
     /** Event-based mouse input adapter (demonstrates IL2DInputAdapter). */
     var input:L2DHeapsInputAdapter;
@@ -90,7 +105,7 @@ class HeapsDemo extends App
         infoText.textColor = 0xFFFFFFFF;
         infoText.x = 8;
         infoText.y = 8;
-        infoText.text = 'Live2D Haxe - Heaps Demo v0.9\n'
+        infoText.text = 'Live2D Haxe - Heaps Demo v1.0\n'
             + 'Click: Hit test + motion\n'
             + 'Hold mouse: Eye tracking\n'
             + 'Ctrl + drag: Move model\n'
@@ -98,13 +113,14 @@ class HeapsDemo extends App
             + 'E: Expression | M: Motion\n'
             + 'B: Breath | P: Physics | L: LipSync\n'
             + 'T: Toggle first part (L2DParts)\n'
+            + 'H: Hot-reload | F: Filter | V: LipSync(synth)\n'
             + 'LEFT/RIGHT: Switch model\n'
-            + 'Extensions: MotionQueue + LookAt + EventDispatcher + InputAdapter + Parts + UserData';
+            + 'v1.0: Hot-reload + Filter chain + LipSync AudioSource + Mask RT Pool + GPU buffer reuse';
 
         statusText = new Text(font, s2d);
         statusText.textColor = 0xFFCCCCCC;
         statusText.x = 8;
-        statusText.y = 160;
+        statusText.y = 180;
 
         // Event-based mouse input via IL2DInputAdapter (Heaps implementation).
         // Keyboard input still uses hxd.Key polling — the adapter only normalizes
@@ -153,6 +169,10 @@ class HeapsDemo extends App
             l2d.remove();
             l2d = null;
         }
+        // LipSync is bound to the old core — discard on model switch
+        if (lipSync != null) { lipSync.disable(); lipSync = null; audioSource = null; }
+        // Reset filters on model switch
+        filterMode = 0;
 
         var modelName = MODEL_LIST[index];
         l2d = new L2DHeapsObject(
@@ -342,11 +362,52 @@ class HeapsDemo extends App
                 updateStatus('Part "${p.name}" → ${p.get() > 0.5 ? "hide" : "show"}');
             }
         }
+        if (Key.isPressed(Key.H))
+        {
+            l2d.hotReloadEnabled = !l2d.hotReloadEnabled;
+            updateStatus('Hot-reload: ${l2d.hotReloadEnabled ? "ON" : "OFF"}');
+        }
+        if (Key.isPressed(Key.F))
+        {
+            filterMode = (filterMode + 1) % 5;
+            l2d.clearFilters();
+            switch (filterMode)
+            {
+                case 1: l2d.addFilter(new Glow(0xFFFFFF));
+                case 2: l2d.addFilter(new Blur(3.0));
+                case 3: l2d.addFilter(new Outline(4.0, 0xFF0000));
+                case 4: l2d.addFilter(new Glow(0xFFFFFF)); l2d.addFilter(new Blur(3.0));
+            }
+            var names = ["none", "glow", "blur", "outline", "glow+blur"];
+            updateStatus('Filter: ${names[filterMode]}');
+        }
+        if (Key.isPressed(Key.V))
+        {
+            // LipSync demo with synthesized amplitude (no wav file needed).
+            // To use real audio, replace with:
+            //   var sound = hxd.Res.load("audio/sample").toSound();
+            //   var source = new L2DHeapsAudioSource(sound);
+            //   source.play();
+            //   // then in update: source.update(dt); lipSync.update(dt);
+            if (lipSync == null)
+            {
+                audioSource = new L2DCallbackAudioSource(() -> {
+                    var t = haxe.Timer.stamp();
+                    var amp = 0.3 + 0.3 * Math.sin(t * 8) + 0.1 * Math.sin(t * 23);
+                    return amp < 0 ? 0 : (amp > 1 ? 1 : amp);
+                });
+                lipSync = new L2DLipSync(l2d.core, audioSource);
+            }
+            if (lipSync.enabled) lipSync.disable();
+            else lipSync.enable();
+            updateStatus('LipSync (synth): ${lipSync.enabled ? "ON" : "OFF"}');
+        }
 
-        // Update extensions (order: motionQueue polls completion + UserData events → lookAt writes setDragging → parts tween)
+        // Update extensions (order: motionQueue polls completion + UserData events → lookAt writes setDragging → parts tween → lipSync)
         if (motionQueue != null) motionQueue.update(dt);
         if (lookAt != null) lookAt.update(dt);
         if (parts != null) parts.update(dt);
+        if (lipSync != null && lipSync.enabled) lipSync.update(dt);
     }
 
     override function onResize()

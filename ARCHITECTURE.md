@@ -8,9 +8,11 @@ live2d-haxe uses a **CalcOnly** architecture: the C++ native layer handles all c
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  Extension Layer (v0.8+)                             │
+│  Extension Layer (v0.8+, v1.0 expanded)              │
 │  L2DMotionQueue · L2DLookAt · L2DLipSync            │  Optional, composable utilities
 │  L2DEventDispatcher · L2DModelConstants              │  Pure Haxe, depends only on L2DCore
+│  L2DAudioSourceBase + 3 backend AudioSources         │  v1.0: LipSync backend specialization
+│  L2DHeapsObject: hot-reload · filter chain           │  v1.0: Heaps DX combo
 ├─────────────────────────────────────────────────────┤
 │  Framework Integration Layer                         │
 │  L2DFlixelComponent / L2DHeapsObject / ...          │  Adapts to specific game framework
@@ -171,7 +173,7 @@ The Extension Layer provides high-level utilities that reduce boilerplate for co
 
 ### Abstraction Interfaces
 
-- **`IL2DAudioSource`** — `getAmplitude():Float`. Default impl: `L2DCallbackAudioSource` (wraps `() -> Float`). Backend-specific AudioSources (wav decode + RMS) deferred to v0.9.
+- **`IL2DAudioSource`** — `getAmplitude():Float`. Default impl: `L2DCallbackAudioSource` (wraps `() -> Float`). v1.0 adds `L2DAudioSourceBase` (composes `L2DWavFileAudioSource`) + three backend subclasses: `L2DHeapsAudioSource` (`hxd.snd.Channel.position`), `L2DOpenFLAudioSource` (`SoundChannel.position`), `L2DFlixelAudioSource` (`FlxSound.time`). See [AudioSource Pattern (v1.0)](#audio-source-pattern-v10) below.
 - **`IL2DInputAdapter`** — `bindMove/bindDown/bindUp(callback)`, `dispose()`. Three implementations: `L2DOpenFLInputAdapter` (event-based), `L2DFlixelInputAdapter` (polling-based, requires `adapter.update()`), `L2DHeapsInputAdapter` (event-based).
 
 ### Usage Example
@@ -193,3 +195,46 @@ lookAt.setTarget(mouseX, mouseY);
 motionQueue.enqueue("TapBody", 0, 3);  // Force priority
 dispatcher.hitTestAreas(["Head", "Body"], clickX, clickY);
 ```
+
+## Heaps Rendering Invariants (v1.0)
+
+Three internal invariants the Heaps backend relies on as of v1.0. These are not public APIs but document why the code is structured the way it is — future refactors must preserve them.
+
+### sync Ordering Invariant (D1)
+
+`L2DHeapsObject.sync(ctx)` must run `core.update(dt)` + `core.render()` **before** `super.sync(ctx)`.
+
+**Why:** h2d's `sync` pass is top-down — a parent's `sync` runs before its children's. `L2DMeshDrawable` (a child of `L2DHeapsObject`) reads vertex counts during its own `sync` to decide whether to reallocate its GPU buffer. If `core.update` runs *after* `super.sync`, the drawable sees the *previous* frame's counts during sync, then `core.render` produces new vertices, and `draw` is forced to upload a second time to catch up. Reordering so `core.update+render` runs first means the drawable sees current-frame vertices during sync, and `draw` uploads exactly once.
+
+### Mask RT Cache Pool (D3)
+
+`L2DHeapsMaskRTCache` uses a **POOL** strategy, not a refcounted single RT.
+
+**Why not refcount:** Two concurrent models sharing one mask RT would corrupt each other's data. h2d sync is top-down across the whole scene graph: model A's sync writes its masks into the RT, then model B's sync overwrites the same RT with B's masks, then model A's draw samples the RT — now reading B's masks. The POOL gives each concurrent model its own RT instance; when a model is destroyed its RT returns to the pool (keyed by `"WxH"`) for a future model to reuse, avoiding both corruption and per-model allocation churn.
+
+### GPU Buffer Reuse (D2)
+
+`L2DMeshDrawable` holds a grow-only `h3d.Buffer` (`BufferFlag.Dynamic` + `BufferFlag.RawFormat`).
+
+**Why:** A typical 130-drawable model would otherwise allocate ~130 GPU buffers every frame. The buffer is reused across frames and reallocated only when capacity is insufficient. `uploadVector` uploads in place; `render` passes an explicit `drawTri` count to limit drawing to the active index range, so the buffer's allocated capacity and the active vertex count are decoupled.
+
+### Mask Group Buffer Isolation (D4)
+
+All mask groups in `renderMaskToBitmapData` share one reusable `maskDrawable` and its `MeshPrimitive`. **Each group must use an independent GPU vertex buffer** — call `maskDrawable.primitive.invalidateBuffer()` after each group's draw to force a fresh buffer allocation on the next `updateMesh` → `flush`.
+
+**Why:** Without isolation, OpenGL's asynchronous pipeline creates a data race. Group 0 draws with its vertices, then group 1's `updateMesh` → `uploadVector` calls `glBufferSubData` on the *same* GPU buffer. If the GPU hasn't finished group 0's `glDrawElements`, it reads group 1's vertices for group 0's geometry. In practice this manifests as mask shapes rendering at wrong positions (e.g., left-eye green pixels at right-eye X coordinates on the mask RT, causing the right eye to sample an empty mask channel and disappear).
+
+`invalidateBuffer()` disposes the current GPU buffer object and clears the reference, so the next `flush()` allocates a brand-new buffer — guaranteeing that in-flight draws on the old buffer complete before any new data is written. Called at the end of `drawSolidTriangles` too to prevent cross-call races between the fallback path and `renderMaskToBitmapData`.
+
+## Audio Source Pattern (v1.0)
+
+`L2DAudioSourceBase` implements `IL2DAudioSource` by composing `L2DWavFileAudioSource` (pure-Haxe WAV decode + sliding-window RMS). Backend subclasses (`L2DHeapsAudioSource`, `L2DOpenFLAudioSource`, `L2DFlixelAudioSource`) only set `wav.positionProvider` in their constructor — a `() -> Float` closure that returns the backend's live playback position (in seconds). This lets the RMS window track actual audio playback instead of a self-advancing playhead that can drift.
+
+**Two-step update rule:** `L2DLipSync.update(dt)` only calls `source.getAmplitude()` — it never calls `source.update(dt)`. The caller must run `source.update(dt)` (which advances the RMS window via `positionProvider`) *before* `lipSync.update(dt)` each frame:
+
+```haxe
+source.update(dt);    // advance RMS window to match live playback position
+lipSync.update(dt);   // read amplitude → write mouth param via setLipSyncValue
+```
+
+This separation keeps `L2DLipSync` backend-agnostic (it only needs `getAmplitude()`) while letting backend subclasses own their playback lifecycle (`play`/`stop`/`pause`/`resume`/`volume`).
