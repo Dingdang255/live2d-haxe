@@ -163,7 +163,6 @@ add_library(live2d_capi SHARED
   live2d/LAppModel_CalcOnly.cpp
   live2d/LAppPal_CalcOnly.cpp
 )
-target_link_options(live2d_capi PRIVATE "/DEF:\"${CMAKE_SOURCE_DIR}/live2d/live2d_capi.def\"")
 target_include_directories(live2d_capi PUBLIC
   ${CUBISM_ROOT}/Core/include
   ${CUBISM_ROOT}/Framework/src

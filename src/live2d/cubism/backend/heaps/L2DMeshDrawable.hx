@@ -67,6 +67,7 @@ class L2DMeshDrawable extends Drawable
         cubismShader.u_useColor = 0;
         cubismShader.u_opacity = 1;
         cubismShader.u_isInverted = 0;
+        cubismShader.u_convertPremul = 1;
         cubismShader.u_channelFlag.set(1, 0, 0, 0);
         cubismShader.u_maskOffset.set(0, 0);
         cubismShader.u_maskScale.set(1, 1);

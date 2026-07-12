@@ -14,7 +14,6 @@ import live2d.cubism.core.L2DModel;
 @:cppFileCode('
 #include <windows.h>
 struct L2DFunctions {
-    int (*test_add)(int, int);
     void (*framework_start_up)();
     void (*framework_clean_up)();
     void* (*load_model)(const char*, const char*);
@@ -27,20 +26,15 @@ struct L2DFunctions {
     void (*get_drawable_vertex_uvs)(void*, int, float*);
     int (*get_drawable_index_count)(void*, int);
     void (*get_drawable_indices)(void*, int, uint16_t*);
-    float (*get_drawable_opacity)(void*, int);
-    int (*get_drawable_render_order)(void*, int);
-    int (*get_drawable_texture_index)(void*, int);
-    bool (*is_drawable_visible)(void*, int);
-    void (*get_drawable_multiply_color)(void*, int, float*);
-    void (*get_drawable_screen_color)(void*, int, float*);
-    int (*get_drawable_blend_mode)(void*, int);
     int (*get_texture_count)(void*);
     void (*get_texture_path)(void*, int, char*, int);
     float (*get_canvas_width)(void*);
     float (*get_canvas_height)(void*);
     intptr_t (*start_motion)(void*, const char*, int, int);
     intptr_t (*start_random_motion)(void*, const char*, int);
+    intptr_t (*start_motion_file)(void*, const char*, int);
     bool (*is_motion_finished)(void*, intptr_t);
+    void (*stop_all_motions)(void*);
     void (*set_expression)(void*, const char*);
     void (*set_random_expression)(void*);
     bool (*hit_test)(void*, const char*, float, float);
@@ -52,7 +46,6 @@ struct L2DFunctions {
     int (*get_drawable_mask_count)(void*, int);
     void (*get_drawable_masks)(void*, int, int*);
     bool (*get_drawable_inverted_mask)(void*, int);
-    bool (*get_drawable_dynamic_flag_vertex_positions_did_change)(void*, int);
     void (*get_drawable_batch_metadata)(void*, int, char*);
     void (*set_breath_enabled)(void*, bool);
     void (*set_eye_blink_enabled)(void*, bool);
@@ -73,6 +66,10 @@ struct L2DFunctions {
     float (*get_part_opacity)(void*, int);
     void (*set_part_opacity)(void*, int, float);
     void (*reset_pose)(void*);
+    void (*set_physics_options)(void*, float, float, float, float);
+    void (*get_physics_options)(void*, float*, float*, float*, float*);
+    void (*reset_physics)(void*);
+    void (*stabilize_physics)(void*);
     bool loaded;
 };
 static L2DFunctions l2dFn = {0};
@@ -83,7 +80,6 @@ static void l2d_ensure_loaded() {
     if (!h) h = LoadLibraryA("live2d_capi");
     if (!h) return;
     #define L2D_LOAD(name) l2dFn.name = (decltype(l2dFn.name))GetProcAddress(h, "l2d_" #name)
-    L2D_LOAD(test_add);
     L2D_LOAD(framework_start_up);
     L2D_LOAD(framework_clean_up);
     L2D_LOAD(load_model);
@@ -96,20 +92,15 @@ static void l2d_ensure_loaded() {
     L2D_LOAD(get_drawable_vertex_uvs);
     L2D_LOAD(get_drawable_index_count);
     L2D_LOAD(get_drawable_indices);
-    L2D_LOAD(get_drawable_opacity);
-    L2D_LOAD(get_drawable_render_order);
-    L2D_LOAD(get_drawable_texture_index);
-    L2D_LOAD(is_drawable_visible);
-    L2D_LOAD(get_drawable_multiply_color);
-    L2D_LOAD(get_drawable_screen_color);
-    L2D_LOAD(get_drawable_blend_mode);
     L2D_LOAD(get_texture_count);
     L2D_LOAD(get_texture_path);
     L2D_LOAD(get_canvas_width);
     L2D_LOAD(get_canvas_height);
     L2D_LOAD(start_motion);
     L2D_LOAD(start_random_motion);
+    L2D_LOAD(start_motion_file);
     L2D_LOAD(is_motion_finished);
+    L2D_LOAD(stop_all_motions);
     L2D_LOAD(set_expression);
     L2D_LOAD(set_random_expression);
     L2D_LOAD(hit_test);
@@ -121,7 +112,6 @@ static void l2d_ensure_loaded() {
     L2D_LOAD(get_drawable_mask_count);
     L2D_LOAD(get_drawable_masks);
     L2D_LOAD(get_drawable_inverted_mask);
-    L2D_LOAD(get_drawable_dynamic_flag_vertex_positions_did_change);
     L2D_LOAD(get_drawable_batch_metadata);
     L2D_LOAD(set_breath_enabled);
     L2D_LOAD(set_eye_blink_enabled);
@@ -142,6 +132,10 @@ static void l2d_ensure_loaded() {
     L2D_LOAD(get_part_opacity);
     L2D_LOAD(set_part_opacity);
     L2D_LOAD(reset_pose);
+    L2D_LOAD(set_physics_options);
+    L2D_LOAD(get_physics_options);
+    L2D_LOAD(reset_physics);
+    L2D_LOAD(stabilize_physics);
     #undef L2D_LOAD
     l2dFn.loaded = true;
 }
@@ -224,9 +218,19 @@ class HxcppWindowsBridge implements ICubismBridge
         return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.start_random_motion ? (int)l2dFn.start_random_motion(M((cpp::Int64){0}), {1}.utf8_str(), {2}) : -1)', m(model), group, priority);
     }
 
+    public function startMotionFile(model:L2DModel, path:String, priority:Int):Int
+    {
+        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.start_motion_file ? (int)l2dFn.start_motion_file(M((cpp::Int64){0}), {1}.utf8_str(), {2}) : -1)', m(model), path, priority);
+    }
+
     public function isMotionFinished(model:L2DModel, handle:Int):Bool
     {
         return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.is_motion_finished ? l2dFn.is_motion_finished(M((cpp::Int64){0}), (intptr_t){1}) : true)', m(model), handle);
+    }
+
+    public function stopAllMotions(model:L2DModel):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.stop_all_motions) l2dFn.stop_all_motions(M((cpp::Int64){0}))', m(model));
     }
 
     // ===== Expression =====
@@ -285,41 +289,6 @@ class HxcppWindowsBridge implements ICubismBridge
         untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.get_drawable_indices) l2dFn.get_drawable_indices(M((cpp::Int64){0}), {1}, (uint16_t*)({2}->b.mPtr->GetBase()))', m(model), i, out);
     }
 
-    public function getDrawableOpacity(model:L2DModel, i:Int):Float
-    {
-        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.get_drawable_opacity ? l2dFn.get_drawable_opacity(M((cpp::Int64){0}), {1}) : 0.0f)', m(model), i);
-    }
-
-    public function getDrawableRenderOrder(model:L2DModel, i:Int):Int
-    {
-        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.get_drawable_render_order ? l2dFn.get_drawable_render_order(M((cpp::Int64){0}), {1}) : 0)', m(model), i);
-    }
-
-    public function getDrawableTextureIndex(model:L2DModel, i:Int):Int
-    {
-        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.get_drawable_texture_index ? l2dFn.get_drawable_texture_index(M((cpp::Int64){0}), {1}) : -1)', m(model), i);
-    }
-
-    public function isDrawableVisible(model:L2DModel, i:Int):Bool
-    {
-        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.is_drawable_visible ? l2dFn.is_drawable_visible(M((cpp::Int64){0}), {1}) : false)', m(model), i);
-    }
-
-    public function getDrawableMultiplyColor(model:L2DModel, i:Int, out:Bytes):Void
-    {
-        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.get_drawable_multiply_color) l2dFn.get_drawable_multiply_color(M((cpp::Int64){0}), {1}, (float*)({2}->b.mPtr->GetBase()))', m(model), i, out);
-    }
-
-    public function getDrawableScreenColor(model:L2DModel, i:Int, out:Bytes):Void
-    {
-        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.get_drawable_screen_color) l2dFn.get_drawable_screen_color(M((cpp::Int64){0}), {1}, (float*)({2}->b.mPtr->GetBase()))', m(model), i, out);
-    }
-
-    public function getDrawableBlendMode(model:L2DModel, i:Int):Int
-    {
-        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.get_drawable_blend_mode ? l2dFn.get_drawable_blend_mode(M((cpp::Int64){0}), {1}) : 0)', m(model), i);
-    }
-
     // ===== Mask =====
 
     public function getDrawableMaskCount(model:L2DModel, i:Int):Int
@@ -335,11 +304,6 @@ class HxcppWindowsBridge implements ICubismBridge
     public function getDrawableInvertedMask(model:L2DModel, i:Int):Bool
     {
         return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.get_drawable_inverted_mask ? l2dFn.get_drawable_inverted_mask(M((cpp::Int64){0}), {1}) : false)', m(model), i);
-    }
-
-    public function isDrawableVertexPositionsDidChange(model:L2DModel, i:Int):Bool
-    {
-        return untyped __cpp__('(l2d_ensure_loaded(), l2dFn.get_drawable_dynamic_flag_vertex_positions_did_change ? l2dFn.get_drawable_dynamic_flag_vertex_positions_did_change(M((cpp::Int64){0}), {1}) : false)', m(model), i);
     }
 
     public function getDrawableBatchMetadata(model:L2DModel, count:Int, out:Bytes):Void
@@ -484,6 +448,29 @@ class HxcppWindowsBridge implements ICubismBridge
     public function resetPose(model:L2DModel):Void
     {
         untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.reset_pose) l2dFn.reset_pose(M((cpp::Int64){0}))', m(model));
+    }
+
+    // ===== Physics Runtime Tuning =====
+
+    public function setPhysicsOptions(model:L2DModel, gravityX:Float, gravityY:Float, windX:Float, windY:Float):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.set_physics_options) l2dFn.set_physics_options(M((cpp::Int64){0}), {1}, {2}, {3}, {4})', m(model), gravityX, gravityY, windX, windY);
+    }
+
+    // out: 16 bytes, layout [gx, gy, wx, wy] as float32 LE
+    public function getPhysicsOptions(model:L2DModel, out:Bytes):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.get_physics_options) { float gx=0.0f, gy=-1.0f, wx=0.0f, wy=0.0f; l2dFn.get_physics_options(M((cpp::Int64){0}), &gx, &gy, &wx, &wy); float* o = (float*)({1}->b.mPtr->GetBase()); o[0]=gx; o[1]=gy; o[2]=wx; o[3]=wy; }', m(model), out);
+    }
+
+    public function resetPhysics(model:L2DModel):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.reset_physics) l2dFn.reset_physics(M((cpp::Int64){0}))', m(model));
+    }
+
+    public function stabilizePhysics(model:L2DModel):Void
+    {
+        untyped __cpp__('l2d_ensure_loaded(); if(l2dFn.stabilize_physics) l2dFn.stabilize_physics(M((cpp::Int64){0}))', m(model));
     }
 }
 

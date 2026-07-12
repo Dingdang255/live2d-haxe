@@ -22,7 +22,7 @@ if not exist "bin\heaps\assets" mkdir "bin\heaps\assets"
 xcopy /Y /E /I "assets\live2d" "bin\heaps\assets\live2d\" >nul
 
 echo.
-echo Done. Run with: cd bin\heaps ^&^& hl heaps_demo.hl
+echo Done. Run with `hl heaps_demo.hl` in bin\heaps
 echo (Ensure hl.exe is in PATH)
 
 exit

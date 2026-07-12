@@ -527,6 +527,73 @@ CubismMotionQueueEntryHandle LAppModel_CalcOnly::StartRandomMotion(const csmChar
     return StartMotion(group, no, priority, onFinishedMotionHandler, onBeganMotionHandler);
 }
 
+CubismMotionQueueEntryHandle LAppModel_CalcOnly::StartMotionFile(const csmChar* path, csmInt32 priority,
+    ACubismMotion::FinishedMotionCallback onFinishedMotionHandler, ACubismMotion::BeganMotionCallback onBeganMotionHandler)
+{
+    if (priority == LAppDefine::PriorityForce)
+    {
+        _motionManager->SetReservePriority(priority);
+    }
+    else if (!_motionManager->ReserveMotion(priority))
+    {
+        if (_debugMode)
+        {
+            LAppPal_CalcOnly::PrintLogLn("[APP]can't start motion (file).");
+        }
+        return InvalidMotionQueueEntryHandleValue;
+    }
+
+    // Resolve path: if not absolute, prepend model home directory
+    csmString resolvedPath;
+    if (path[0] == '/' || path[0] == '\\' || (path[0] != '\0' && path[1] == ':'))
+    {
+        // Absolute path (Unix or Windows drive letter)
+        resolvedPath = path;
+    }
+    else
+    {
+        resolvedPath = _modelHomeDir + path;
+    }
+
+    csmByte* buffer;
+    csmSizeInt size;
+    buffer = CreateBuffer(resolvedPath.GetRawString(), &size);
+    if (buffer == NULL)
+    {
+        CubismLogError("Can't read motion file: %s", resolvedPath.GetRawString());
+        _motionManager->SetReservePriority(LAppDefine::PriorityNone);
+        return InvalidMotionQueueEntryHandleValue;
+    }
+
+    // Use a unique name derived from the file path for caching
+    csmString name = resolvedPath;
+
+    CubismMotion* motion = static_cast<CubismMotion*>(LoadMotion(buffer, size, NULL,
+        onFinishedMotionHandler, onBeganMotionHandler, NULL, NULL, 0, false));
+    csmBool autoDelete = false;
+
+    if (motion)
+    {
+        motion->SetEffectIds(_eyeBlinkIds, _lipSyncIds);
+        autoDelete = true;
+    }
+    else
+    {
+        CubismLogError("Can't start motion file: %s", resolvedPath.GetRawString());
+        _motionManager->SetReservePriority(LAppDefine::PriorityNone);
+        DeleteBuffer(buffer, resolvedPath.GetRawString());
+        return InvalidMotionQueueEntryHandleValue;
+    }
+
+    DeleteBuffer(buffer, resolvedPath.GetRawString());
+
+    if (_debugMode)
+    {
+        LAppPal_CalcOnly::PrintLogLn("[APP]start motion (file): [%s]", resolvedPath.GetRawString());
+    }
+    return _motionManager->StartMotionPriority(motion, autoDelete, priority);
+}
+
 csmBool LAppModel_CalcOnly::HitTest(const csmChar* hitAreaName, csmFloat32 x, csmFloat32 y)
 {
     if (_opacity < 1)
@@ -590,25 +657,6 @@ void LAppModel_CalcOnly::SetRandomExpression()
     }
 }
 
-csmBool LAppModel_CalcOnly::HasMocConsistencyFromFile(const csmChar* mocFileName)
-{
-    CSM_ASSERT(strcmp(mocFileName, ""));
-
-    csmByte* buffer;
-    csmSizeInt size;
-
-    csmString path = mocFileName;
-    path = _modelHomeDir + path;
-
-    buffer = CreateBuffer(path.GetRawString(), &size);
-
-    csmBool consistency = CubismMoc::HasMocConsistencyFromUnrevivedMoc(buffer, size);
-
-    DeleteBuffer(buffer);
-
-    return consistency;
-}
-
 csmInt32 LAppModel_CalcOnly::GetTextureCount()
 {
     if (_modelSetting == NULL)
@@ -661,13 +709,49 @@ void LAppModel_CalcOnly::SetLipSyncValue(csmFloat32 value)
     }
 }
 
-csmBool LAppModel_CalcOnly::IsBreathEnabled() const { return _breathEnabled; }
-csmBool LAppModel_CalcOnly::IsEyeBlinkEnabled() const { return _eyeBlinkEnabled; }
-csmBool LAppModel_CalcOnly::IsExpressionEnabled() const { return _expressionEnabled; }
-csmBool LAppModel_CalcOnly::IsLookEnabled() const { return _lookEnabled; }
-csmBool LAppModel_CalcOnly::IsPhysicsEnabled() const { return _physicsEnabled; }
-csmBool LAppModel_CalcOnly::IsLipSyncEnabled() const { return _lipSyncEnabled; }
-csmBool LAppModel_CalcOnly::IsPoseEnabled() const { return _poseEnabled; }
+// ===== Physics runtime tuning =====
+
+void LAppModel_CalcOnly::SetPhysicsOptions(csmFloat32 gravityX, csmFloat32 gravityY,
+                                           csmFloat32 windX, csmFloat32 windY)
+{
+    if (_physics == nullptr) return;
+    CubismPhysics::Options opt;
+    opt.Gravity.X = gravityX;
+    opt.Gravity.Y = gravityY;
+    opt.Wind.X = windX;
+    opt.Wind.Y = windY;
+    _physics->SetOptions(opt);
+}
+
+void LAppModel_CalcOnly::GetPhysicsOptions(csmFloat32* outGravityX, csmFloat32* outGravityY,
+                                           csmFloat32* outWindX, csmFloat32* outWindY) const
+{
+    if (_physics == nullptr)
+    {
+        if (outGravityX) *outGravityX = 0.0f;
+        if (outGravityY) *outGravityY = -1.0f;
+        if (outWindX) *outWindX = 0.0f;
+        if (outWindY) *outWindY = 0.0f;
+        return;
+    }
+    const CubismPhysics::Options& opt = _physics->GetOptions();
+    if (outGravityX) *outGravityX = opt.Gravity.X;
+    if (outGravityY) *outGravityY = opt.Gravity.Y;
+    if (outWindX) *outWindX = opt.Wind.X;
+    if (outWindY) *outWindY = opt.Wind.Y;
+}
+
+void LAppModel_CalcOnly::ResetPhysics()
+{
+    if (_physics == nullptr) return;
+    _physics->Reset();
+}
+
+void LAppModel_CalcOnly::StabilizePhysics()
+{
+    if (_physics == nullptr || _model == nullptr) return;
+    _physics->Stabilization(_model);
+}
 
 // ===== Motion Event Override =====
 

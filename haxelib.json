@@ -4,10 +4,10 @@
   "license": "MIT",
   "tags": ["live2d", "cubism", "openfl", "flixel", "heaps", "cpp", "hl", "native", "multi-backend"],
   "description": "Live2D Cubism SDK for Haxe - GPU shader rendering with multi-backend abstraction (cpp + hl, OpenFL/Flixel/Heaps)",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "classPath": "src",
   "main": "live2d.CLI",
-  "releasenote": "v1.0.0: First stable release. Heaps performance (sync ordering fix eliminates double GPU upload, grow-only Dynamic buffer reuse, mask RT cache pool for concurrent models), Heaps DX combo (stat-mtime hot-reload + h2d.filter.Group chain API), LipSync backend specialization (L2DAudioSourceBase + L2DHeapsAudioSource/L2DOpenFLAudioSource/L2DFlixelAudioSource driving amplitude from live playback position). No breaking changes.",
+  "releasenote": "v1.1.0: New features: cross-backend perf panel (L2DPerfPanel + 3 implementations), VTube Studio model adapter (L2DVTuberModel with subdir scanning), runtime physics tuner (L2DPhysicsTuner with gravity/wind/strength control), mask RT 2x SSAA, demo polish (dynamic statusText Y). No breaking changes.",
   "contributors": ["Dingdang255"],
   "dependencies": {
     "hxcpp": "4.2.1"

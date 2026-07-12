@@ -42,11 +42,6 @@ public:
     static void PrintMessage(const Csm::csmChar* message);
 
     /**
-     * Log output function for CubismFramework (fixed parameter version, with newline)
-     */
-    static void PrintMessageLn(const Csm::csmChar* message);
-
-    /**
      * Read file as byte data
      * For CubismFramework::StartUp LoadFileFunction
      * Note: csmLoadFileFunction signature requires std::string parameter
@@ -58,16 +53,6 @@ public:
      * For CubismFramework::StartUp ReleaseBytesFunction
      */
     static void ReleaseBytes(Csm::csmByte* byteData);
-
-    /**
-     * Convert multibyte to wide character
-     */
-    static bool ConvertMultiByteToWide(const Csm::csmChar* multiByte, wchar_t* wide, int wideSize);
-
-    /**
-     * Convert wide character to multibyte
-     */
-    static bool ConvertWideToMultiByte(const wchar_t* wide, Csm::csmChar* multiByte, int multiByteSize);
 
 private:
     static Csm::csmFloat32 s_deltaTime;

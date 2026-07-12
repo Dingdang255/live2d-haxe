@@ -68,8 +68,14 @@ class HlWindowsBridge implements ICubismBridge
     public function startRandomMotion(model:L2DModel, group:String, priority:Int):Int
         return hlStartRandomMotion(cast model, toUtf8(group), priority);
 
+    public function startMotionFile(model:L2DModel, path:String, priority:Int):Int
+        return hlStartMotionFile(cast model, toUtf8(path), priority);
+
     public function isMotionFinished(model:L2DModel, handle:Int):Bool
         return hlIsMotionFinished(cast model, handle);
+
+    public function stopAllMotions(model:L2DModel):Void
+        hlStopAllMotions(cast model);
 
     // ===== Expression =====
 
@@ -107,27 +113,6 @@ class HlWindowsBridge implements ICubismBridge
     public function getDrawableIndices(model:L2DModel, i:Int, out:Bytes):Void
         hlGetDrawableIndices(cast model, i, @:privateAccess out.b);
 
-    public function getDrawableOpacity(model:L2DModel, i:Int):Float
-        return hlGetDrawableOpacity(cast model, i);
-
-    public function getDrawableRenderOrder(model:L2DModel, i:Int):Int
-        return hlGetDrawableRenderOrder(cast model, i);
-
-    public function getDrawableTextureIndex(model:L2DModel, i:Int):Int
-        return hlGetDrawableTextureIndex(cast model, i);
-
-    public function isDrawableVisible(model:L2DModel, i:Int):Bool
-        return hlIsDrawableVisible(cast model, i);
-
-    public function getDrawableMultiplyColor(model:L2DModel, i:Int, out:Bytes):Void
-        hlGetDrawableMultiplyColor(cast model, i, @:privateAccess out.b);
-
-    public function getDrawableScreenColor(model:L2DModel, i:Int, out:Bytes):Void
-        hlGetDrawableScreenColor(cast model, i, @:privateAccess out.b);
-
-    public function getDrawableBlendMode(model:L2DModel, i:Int):Int
-        return hlGetDrawableBlendMode(cast model, i);
-
     // ===== Mask =====
 
     public function getDrawableMaskCount(model:L2DModel, i:Int):Int
@@ -138,9 +123,6 @@ class HlWindowsBridge implements ICubismBridge
 
     public function getDrawableInvertedMask(model:L2DModel, i:Int):Bool
         return hlGetDrawableInvertedMask(cast model, i);
-
-    public function isDrawableVertexPositionsDidChange(model:L2DModel, i:Int):Bool
-        return hlGetDrawableDynamicFlagVertexPositionsDidChange(cast model, i);
 
     // ===== Batch =====
 
@@ -244,6 +226,21 @@ class HlWindowsBridge implements ICubismBridge
     public function resetPose(model:L2DModel):Void
         hlResetPose(cast model);
 
+    // ===== Physics Runtime Tuning =====
+
+    public function setPhysicsOptions(model:L2DModel, gravityX:Float, gravityY:Float, windX:Float, windY:Float):Void
+        hlSetPhysicsOptions(cast model, gravityX, gravityY, windX, windY);
+
+    // out: 16 bytes, layout [gx, gy, wx, wy] as float32 LE
+    public function getPhysicsOptions(model:L2DModel, out:Bytes):Void
+        hlGetPhysicsOptions(cast model, @:privateAccess out.b);
+
+    public function resetPhysics(model:L2DModel):Void
+        hlResetPhysics(cast model);
+
+    public function stabilizePhysics(model:L2DModel):Void
+        hlStabilizePhysics(cast model);
+
     // ============================================================
     // @:hlNative bindings to live2d_hl.hdll
     // ============================================================
@@ -261,7 +258,9 @@ class HlWindowsBridge implements ICubismBridge
     @:hlNative("live2d_hl", "set_parameter_value")                           static function hlSetParameterValue(model:hl.I64, index:Int, value:Float, weight:Float):Void {}
     @:hlNative("live2d_hl", "start_motion")                                  static function hlStartMotion(model:hl.I64, group:hl.Bytes, no:Int, priority:Int):Int return -1;
     @:hlNative("live2d_hl", "start_random_motion")                           static function hlStartRandomMotion(model:hl.I64, group:hl.Bytes, priority:Int):Int return -1;
+    @:hlNative("live2d_hl", "start_motion_file")                             static function hlStartMotionFile(model:hl.I64, path:hl.Bytes, priority:Int):Int return -1;
     @:hlNative("live2d_hl", "is_motion_finished")                            static function hlIsMotionFinished(model:hl.I64, handle:Int):Bool return true;
+    @:hlNative("live2d_hl", "stop_all_motions")                              static function hlStopAllMotions(model:hl.I64):Void {}
     @:hlNative("live2d_hl", "set_expression")                                static function hlSetExpression(model:hl.I64, expressionID:hl.Bytes):Void {}
     @:hlNative("live2d_hl", "set_random_expression")                         static function hlSetRandomExpression(model:hl.I64):Void {}
     @:hlNative("live2d_hl", "hit_test")                                      static function hlHitTest(model:hl.I64, areaName:hl.Bytes, x:Float, y:Float):Bool return false;
@@ -272,17 +271,9 @@ class HlWindowsBridge implements ICubismBridge
     @:hlNative("live2d_hl", "get_drawable_vertex_uvs")                       static function hlGetDrawableVertexUvs(model:hl.I64, i:Int, out:hl.Bytes):Void {}
     @:hlNative("live2d_hl", "get_drawable_index_count")                      static function hlGetDrawableIndexCount(model:hl.I64, i:Int):Int return 0;
     @:hlNative("live2d_hl", "get_drawable_indices")                          static function hlGetDrawableIndices(model:hl.I64, i:Int, out:hl.Bytes):Void {}
-    @:hlNative("live2d_hl", "get_drawable_opacity")                          static function hlGetDrawableOpacity(model:hl.I64, i:Int):Float return 0;
-    @:hlNative("live2d_hl", "get_drawable_render_order")                     static function hlGetDrawableRenderOrder(model:hl.I64, i:Int):Int return 0;
-    @:hlNative("live2d_hl", "get_drawable_texture_index")                    static function hlGetDrawableTextureIndex(model:hl.I64, i:Int):Int return -1;
-    @:hlNative("live2d_hl", "is_drawable_visible")                           static function hlIsDrawableVisible(model:hl.I64, i:Int):Bool return false;
-    @:hlNative("live2d_hl", "get_drawable_multiply_color")                   static function hlGetDrawableMultiplyColor(model:hl.I64, i:Int, out:hl.Bytes):Void {}
-    @:hlNative("live2d_hl", "get_drawable_screen_color")                     static function hlGetDrawableScreenColor(model:hl.I64, i:Int, out:hl.Bytes):Void {}
-    @:hlNative("live2d_hl", "get_drawable_blend_mode")                       static function hlGetDrawableBlendMode(model:hl.I64, i:Int):Int return 0;
     @:hlNative("live2d_hl", "get_drawable_mask_count")                       static function hlGetDrawableMaskCount(model:hl.I64, i:Int):Int return 0;
     @:hlNative("live2d_hl", "get_drawable_masks")                            static function hlGetDrawableMasks(model:hl.I64, i:Int, out:hl.Bytes):Void {}
     @:hlNative("live2d_hl", "get_drawable_inverted_mask")                    static function hlGetDrawableInvertedMask(model:hl.I64, i:Int):Bool return false;
-    @:hlNative("live2d_hl", "get_drawable_dynamic_flag_vertex_positions_did_change") static function hlGetDrawableDynamicFlagVertexPositionsDidChange(model:hl.I64, i:Int):Bool return false;
     @:hlNative("live2d_hl", "get_drawable_batch_metadata")                   static function hlGetDrawableBatchMetadata(model:hl.I64, count:Int, out:hl.Bytes):Void {}
     @:hlNative("live2d_hl", "get_texture_count")                             static function hlGetTextureCount(model:hl.I64):Int return 0;
     @:hlNative("live2d_hl", "get_texture_path")                              static function hlGetTexturePath(model:hl.I64, i:Int, out:hl.Bytes, bufLen:Int):Void {}
@@ -307,6 +298,10 @@ class HlWindowsBridge implements ICubismBridge
     @:hlNative("live2d_hl", "get_part_opacity")                              static function hlGetPartOpacity(model:hl.I64, idx:Int):Float return 0;
     @:hlNative("live2d_hl", "set_part_opacity")                              static function hlSetPartOpacity(model:hl.I64, idx:Int, opacity:Float):Void {}
     @:hlNative("live2d_hl", "reset_pose")                                    static function hlResetPose(model:hl.I64):Void {}
+    @:hlNative("live2d_hl", "set_physics_options")                           static function hlSetPhysicsOptions(model:hl.I64, gx:Float, gy:Float, wx:Float, wy:Float):Void {}
+    @:hlNative("live2d_hl", "get_physics_options")                           static function hlGetPhysicsOptions(model:hl.I64, out:hl.Bytes):Void {}
+    @:hlNative("live2d_hl", "reset_physics")                                 static function hlResetPhysics(model:hl.I64):Void {}
+    @:hlNative("live2d_hl", "stabilize_physics")                             static function hlStabilizePhysics(model:hl.I64):Void {}
 }
 
 #end

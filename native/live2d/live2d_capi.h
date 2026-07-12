@@ -21,9 +21,6 @@ extern "C" {
 
 typedef void* L2D_Model;
 
-// ===== Test =====
-L2D_API int l2d_test_add(int a, int b);
-
 // ===== Lifecycle =====
 L2D_API L2D_Model l2d_load_model(const char* dir, const char* fileName);
 L2D_API void      l2d_release_model(L2D_Model m);
@@ -46,7 +43,9 @@ L2D_API void  l2d_set_parameter_value(L2D_Model m, int index, float value, float
 // Note: motion handle is intptr_t because CubismMotionQueueEntryHandle is void*
 L2D_API intptr_t l2d_start_motion(L2D_Model m, const char* group, int no, int priority);
 L2D_API intptr_t l2d_start_random_motion(L2D_Model m, const char* group, int priority);
+L2D_API intptr_t l2d_start_motion_file(L2D_Model m, const char* path, int priority);
 L2D_API bool     l2d_is_motion_finished(L2D_Model m, intptr_t motionHandle);
+L2D_API void     l2d_stop_all_motions(L2D_Model m);
 
 // ===== Expression =====
 L2D_API void l2d_set_expression(L2D_Model m, const char* expressionID);
@@ -121,6 +120,21 @@ L2D_API void  l2d_set_part_opacity(L2D_Model m, int partIndex, float opacity);
 // Resets pose part opacities to default values defined in .pose3.json.
 // No-op if the model has no pose file.
 L2D_API void l2d_reset_pose(L2D_Model m);
+
+// ===== Physics Runtime Tuning =====
+// Set runtime gravity/wind vectors used by the physics pendulum simulation.
+// These override the EffectiveForces values parsed from physics3.json.
+// Default gravity is (0, -1); default wind is (0, 0).
+L2D_API void l2d_set_physics_options(L2D_Model m, float gravityX, float gravityY, float windX, float windY);
+// Read back the currently applied gravity/wind. Each out pointer may be NULL.
+L2D_API void l2d_get_physics_options(L2D_Model m, float* outGravityX, float* outGravityY, float* outWindX, float* outWindY);
+// Reset physics pendulum state and restore default gravity/wind options.
+// Useful after large parameter jumps to avoid residual oscillation.
+L2D_API void l2d_reset_physics(L2D_Model m);
+// Stabilize physics with current parameter values (single-shot settle).
+// Computes a steady-state for the pendulum so the model does not swing
+// from initial conditions. Useful right after model load.
+L2D_API void l2d_stabilize_physics(L2D_Model m);
 
 // ===== Moc Version Checking =====
 L2D_API unsigned int l2d_get_core_version();

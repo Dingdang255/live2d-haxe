@@ -2,7 +2,6 @@ package live2d.cubism.backend.openfl;
 
 #if openfl
 
-import openfl.display.Bitmap;
 import openfl.display.BitmapData;
 import openfl.display.BlendMode;
 import openfl.display.Sprite;
@@ -39,7 +38,6 @@ class OpenFLRenderer implements IL2DRenderer
     // Mask offscreen texture
     var maskBitmapData:BitmapData;
     var tempMaskSprite:Sprite;
-    var debugMaskBitmap:Bitmap;
 
     // Pre-allocated shader uniform arrays (avoid ~166 allocations/frame)
     static var UNI_USE_MASK_ON:Array<Float> = [1.0];
@@ -57,6 +55,20 @@ class OpenFLRenderer implements IL2DRenderer
     var uniMaskOffsetBuf:Array<Float> = [0.0, 0.0];
     var uniMaskScaleBuf:Array<Float> = [1.0, 1.0];
     var uniChannelFlagBuf:Array<Float> = [1.0, 0.0, 0.0, 0.0];
+
+    // Fallback mask RT support (per-object BitmapData, mirrors HeapsRenderer)
+    var fbMaskMinX:Float = 0;
+    var fbMaskMinY:Float = 0;
+    var fbMaskWidth:Float = 0;
+    var fbMaskHeight:Float = 0;
+    var fallbackMaskRTs:Map<Sprite, BitmapData> = new Map();
+    // Batching: accumulate shapes for one mask object, flush on target change
+    var pendingFallbackSprite:Sprite;
+    var tempFallbackMaskSprite:Sprite;
+
+    // Resolution cap: BitmapData.fillRect/draw are CPU-side and scale with pixel count.
+    // Cap at 512px max dimension; shader linear filtering handles upscaling from lower res.
+    static inline var FB_MASK_MAX_RES:Int = 512;
 
     public function new(
         ?textureLoader:String->L2DTextureHandle,
@@ -124,6 +136,13 @@ class OpenFLRenderer implements IL2DRenderer
             maskBitmapData = null;
         }
         tempMaskSprite = null;
+        for (rt in fallbackMaskRTs)
+        {
+            if (rt != null) rt.dispose();
+        }
+        fallbackMaskRTs = new Map();
+        pendingFallbackSprite = null;
+        tempFallbackMaskSprite = null;
     }
 
     public function createDisplayObject():L2DDisplayHandle
@@ -186,11 +205,12 @@ class OpenFLRenderer implements IL2DRenderer
         s.transform.colorTransform = defaultColorTransform;
     }
 
-    public function setMask(obj:L2DDisplayHandle, mask:L2DDisplayHandle):Void
+    public function setMask(obj:L2DDisplayHandle, mask:L2DDisplayHandle, ?isInverted:Bool = false):Void
     {
         var s:Sprite = cast obj;
         var maskSprite:Sprite = cast mask;
         s.mask = maskSprite;
+        // Note: isInverted ignored — Flash native Sprite.mask doesn't support inverted masking.
     }
 
     public function clearMask(obj:L2DDisplayHandle):Void
@@ -204,6 +224,24 @@ class OpenFLRenderer implements IL2DRenderer
     public function supportsShaderMask():Bool
     {
         return true;
+    }
+
+    public function getFallbackMaskTexture(obj:L2DDisplayHandle):L2DTextureHandle
+    {
+        // Flush any pending batched shapes before returning (captures last group's work)
+        flushPendingFallbackRT();
+        var s:Sprite = cast obj;
+        return fallbackMaskRTs.get(s);
+    }
+
+    public function setFallbackMaskDimensions(minX:Float, minY:Float, width:Float, height:Float):Void
+    {
+        // Flush any leftover pending work from previous frame
+        flushPendingFallbackRT();
+        fbMaskMinX = minX;
+        fbMaskMinY = minY;
+        fbMaskWidth = width;
+        fbMaskHeight = height;
     }
 
     public function renderMaskToBitmapData(
@@ -265,27 +303,6 @@ class OpenFLRenderer implements IL2DRenderer
         return maskBitmapData;
     }
 
-    /** Show mask texture for debugging */
-    public function showDebugMaskTexture():Void
-    {
-        if (maskBitmapData != null)
-        {
-            if (debugMaskBitmap == null)
-            {
-                debugMaskBitmap = new Bitmap(maskBitmapData);
-                debugMaskBitmap.x = 0;
-                debugMaskBitmap.y = 0;
-                debugMaskBitmap.scaleX = 0.5;
-                debugMaskBitmap.scaleY = 0.5;
-                containerSprite.addChild(debugMaskBitmap);
-            }
-            else
-            {
-                debugMaskBitmap.bitmapData = maskBitmapData;
-            }
-        }
-    }
-
     public function drawShaderTexturedTriangles(obj:L2DDisplayHandle,
         texture:L2DTextureHandle,
         vertices:Array<Float>, uvs:Array<Float>, indices:Array<Int>,
@@ -303,6 +320,7 @@ class OpenFLRenderer implements IL2DRenderer
         var bmpData:BitmapData = null;
         if (texture != null)
             bmpData = textureToBitmapData(texture);
+        if (bmpData == null) trace('[L2D WHITE] drawShaderTexturedTriangles: null bmpData | texture=$texture');
 
         // Set diffuse texture
         rendererShader.data.bitmap.input = bmpData;
@@ -396,7 +414,10 @@ class OpenFLRenderer implements IL2DRenderer
         if (bmpData != null)
             gfx.beginBitmapFill(bmpData, null, false, true);
         else
+        {
+            trace('[L2D WHITE] drawTexturedTriangles: null texture -> white fill | texture=$texture');
             gfx.beginFill(0xFFFFFF, 1.0);
+        }
 
         gfx.drawTriangles(
             Vector.ofArray(vertices),
@@ -411,15 +432,99 @@ class OpenFLRenderer implements IL2DRenderer
         vertices:Array<Float>, indices:Array<Int>):Void
     {
         var s:Sprite = cast obj;
-        var gfx = s.graphics;
-        gfx.beginFill(0xFFFFFF);
-        gfx.drawTriangles(
-            Vector.ofArray(vertices),
-            Vector.ofArray(indices),
-            null,
-            NONE
-        );
-        gfx.endFill();
+
+        // Fallback mask path: accumulate shapes into temp sprite per mask object,
+        // then flush to BitmapData once per group. RT resolution is capped to avoid
+        // expensive CPU-side BitmapData.fillRect/draw on large regions.
+        if (fbMaskWidth > 0)
+        {
+            var rtW = Std.int(fbMaskWidth);
+            var rtH = Std.int(fbMaskHeight);
+            if (rtW > 0 && rtH > 0)
+            {
+                // Resolution cap: downscale if exceeding max dimension
+                var fbScaleX:Float = 1.0;
+                var fbScaleY:Float = 1.0;
+                if (rtW > FB_MASK_MAX_RES || rtH > FB_MASK_MAX_RES)
+                {
+                    var maxDim = rtW > rtH ? rtW : rtH;
+                    fbScaleX = FB_MASK_MAX_RES / maxDim;
+                    fbScaleY = fbScaleX; // uniform scale to preserve aspect
+                    rtW = Math.ceil(rtW * fbScaleX);
+                    rtH = Math.ceil(rtH * fbScaleY);
+                }
+
+                // Flush previous group when target changes
+                if (pendingFallbackSprite != null && pendingFallbackSprite != s)
+                    flushPendingFallbackRT();
+
+                if (pendingFallbackSprite == null)
+                {
+                    pendingFallbackSprite = s;
+
+                    // Ensure RT exists at the right size
+                    var rt = fallbackMaskRTs.get(s);
+                    if (rt == null || rt.width != rtW || rt.height != rtH)
+                    {
+                        if (rt != null) rt.dispose();
+                        rt = new BitmapData(rtW, rtH, true, 0x00000000);
+                        fallbackMaskRTs.set(s, rt);
+                    }
+                    // Clear RT for this frame
+                    rt.fillRect(new Rectangle(0, 0, rtW, rtH), 0x00000000);
+
+                    // Start fresh temp sprite for accumulating shapes
+                    if (tempFallbackMaskSprite == null)
+                        tempFallbackMaskSprite = new Sprite();
+                    tempFallbackMaskSprite.graphics.clear();
+                }
+
+                // Accumulate shape into temp sprite (RT-local coords with downscale)
+                tempFallbackMaskSprite.graphics.beginFill(0xFFFFFF);
+
+                var vertCount = Std.int(vertices.length / 2);
+                var rtVerts = new Array<Float>();
+                for (v in 0...vertCount)
+                {
+                    rtVerts.push((vertices[v * 2] - fbMaskMinX) * fbScaleX);
+                    rtVerts.push((vertices[v * 2 + 1] - fbMaskMinY) * fbScaleY);
+                }
+
+                tempFallbackMaskSprite.graphics.drawTriangles(
+                    Vector.ofArray(rtVerts),
+                    Vector.ofArray(indices),
+                    null, NONE
+                );
+                tempFallbackMaskSprite.graphics.endFill();
+                // Defer BitmapData.draw until flushPendingFallbackRT()
+            }
+        }
+        else
+        {
+            // Non-fallback: draw to sprite graphics (e.g. main mask RT for groups 0-2,
+            // or non-shader path mask objects)
+            var gfx = s.graphics;
+            gfx.beginFill(0xFFFFFF);
+            gfx.drawTriangles(
+                Vector.ofArray(vertices),
+                Vector.ofArray(indices),
+                null,
+                NONE
+            );
+            gfx.endFill();
+        }
+    }
+
+    /** Flush batched shapes for the current pending mask object to its BitmapData. */
+    function flushPendingFallbackRT():Void
+    {
+        if (pendingFallbackSprite == null) return;
+        var rt = fallbackMaskRTs.get(pendingFallbackSprite);
+        if (rt != null && tempFallbackMaskSprite != null)
+        {
+            rt.draw(tempFallbackMaskSprite, null, null, BlendMode.ADD, null, true);
+        }
+        pendingFallbackSprite = null;
     }
 
     // ===== Display list =====

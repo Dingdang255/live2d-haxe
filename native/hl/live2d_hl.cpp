@@ -42,7 +42,9 @@ struct L2DFunctions {
     float (*get_canvas_height)(void*);
     intptr_t (*start_motion)(void*, const char*, int, int);
     intptr_t (*start_random_motion)(void*, const char*, int);
+    intptr_t (*start_motion_file)(void*, const char*, int);
     bool  (*is_motion_finished)(void*, intptr_t);
+    void  (*stop_all_motions)(void*);
     void  (*set_expression)(void*, const char*);
     void  (*set_random_expression)(void*);
     bool  (*hit_test)(void*, const char*, float, float);
@@ -75,6 +77,10 @@ struct L2DFunctions {
     float (*get_part_opacity)(void*, int);
     void  (*set_part_opacity)(void*, int, float);
     void  (*reset_pose)(void*);
+    void  (*set_physics_options)(void*, float, float, float, float);
+    void  (*get_physics_options)(void*, float*, float*, float*, float*);
+    void  (*reset_physics)(void*);
+    void  (*stabilize_physics)(void*);
     bool loaded;
 };
 
@@ -120,7 +126,9 @@ HL_PRIM void HL_NAME(init)() {
     L2D_LOAD(get_canvas_height);
     L2D_LOAD(start_motion);
     L2D_LOAD(start_random_motion);
+    L2D_LOAD(start_motion_file);
     L2D_LOAD(is_motion_finished);
+    L2D_LOAD(stop_all_motions);
     L2D_LOAD(set_expression);
     L2D_LOAD(set_random_expression);
     L2D_LOAD(hit_test);
@@ -153,6 +161,10 @@ HL_PRIM void HL_NAME(init)() {
     L2D_LOAD(get_part_opacity);
     L2D_LOAD(set_part_opacity);
     L2D_LOAD(reset_pose);
+    L2D_LOAD(set_physics_options);
+    L2D_LOAD(get_physics_options);
+    L2D_LOAD(reset_physics);
+    L2D_LOAD(stabilize_physics);
     #undef L2D_LOAD
     l2dFn.loaded = true;
 }
@@ -239,10 +251,20 @@ HL_PRIM int HL_NAME(start_random_motion)(int64_t model, vbyte* group, int priori
 }
 DEFINE_PRIM(_I32, start_random_motion, _I64 _BYTES _I32);
 
+HL_PRIM int HL_NAME(start_motion_file)(int64_t model, vbyte* path, int priority) {
+    return l2dFn.start_motion_file ? (int)l2dFn.start_motion_file(M(model), (const char*)path, priority) : -1;
+}
+DEFINE_PRIM(_I32, start_motion_file, _I64 _BYTES _I32);
+
 HL_PRIM bool HL_NAME(is_motion_finished)(int64_t model, int handle) {
     return l2dFn.is_motion_finished ? l2dFn.is_motion_finished(M(model), (intptr_t)handle) : true;
 }
 DEFINE_PRIM(_BOOL, is_motion_finished, _I64 _I32);
+
+HL_PRIM void HL_NAME(stop_all_motions)(int64_t model) {
+    if (l2dFn.stop_all_motions) l2dFn.stop_all_motions(M(model));
+}
+DEFINE_PRIM(_VOID, stop_all_motions, _I64);
 
 // ============================================================
 // Expression
@@ -521,3 +543,32 @@ HL_PRIM void HL_NAME(reset_pose)(int64_t model) {
     if (l2dFn.reset_pose) l2dFn.reset_pose(M(model));
 }
 DEFINE_PRIM(_VOID, reset_pose, _I64);
+
+// ============================================================
+// Physics Runtime Tuning
+// ============================================================
+
+HL_PRIM void HL_NAME(set_physics_options)(int64_t model, double gx, double gy, double wx, double wy) {
+    if (l2dFn.set_physics_options) l2dFn.set_physics_options(M(model), (float)gx, (float)gy, (float)wx, (float)wy);
+}
+DEFINE_PRIM(_VOID, set_physics_options, _I64 _F64 _F64 _F64 _F64);
+
+// outBuf: 16 bytes, layout: [gx, gy, wx, wy] as float32 LE
+HL_PRIM void HL_NAME(get_physics_options)(int64_t model, vbyte* outBuf) {
+    if (!l2dFn.get_physics_options || !outBuf) return;
+    float gx = 0.0f, gy = -1.0f, wx = 0.0f, wy = 0.0f;
+    l2dFn.get_physics_options(M(model), &gx, &gy, &wx, &wy);
+    float* out = (float*)outBuf;
+    out[0] = gx; out[1] = gy; out[2] = wx; out[3] = wy;
+}
+DEFINE_PRIM(_VOID, get_physics_options, _I64 _BYTES);
+
+HL_PRIM void HL_NAME(reset_physics)(int64_t model) {
+    if (l2dFn.reset_physics) l2dFn.reset_physics(M(model));
+}
+DEFINE_PRIM(_VOID, reset_physics, _I64);
+
+HL_PRIM void HL_NAME(stabilize_physics)(int64_t model) {
+    if (l2dFn.stabilize_physics) l2dFn.stabilize_physics(M(model));
+}
+DEFINE_PRIM(_VOID, stabilize_physics, _I64);

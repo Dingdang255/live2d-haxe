@@ -86,12 +86,6 @@ L2D_API void l2d_release_model(L2D_Model m)
 // Global option for CubismFramework
 static CubismFramework::Option s_option;
 
-L2D_API int l2d_test_add(int a, int b)
-{
-    OutputDebugStringA("[L2D-CPP] l2d_test_add called\r\n");
-    return a + b;
-}
-
 L2D_API void l2d_framework_start_up()
 {
     OutputDebugStringA("[L2D-CPP] l2d_framework_start_up BEGIN\r\n");
@@ -162,6 +156,11 @@ L2D_API void l2d_set_parameter_value(L2D_Model m, int index, float value, float 
     if (m == NULL) return;
     CubismModel* model = GetModel(m)->GetModel();
     model->SetParameterValue(index, value, weight);
+    // Persist the change through the next LoadParameters() call in Update().
+    // Without this, externally-set parameter values (e.g. VTuber expression
+    // toggles from Haxe) are overwritten by the saved state from the previous
+    // frame when LoadParameters() runs at the start of the next Update().
+    model->SaveParameters();
 }
 
 // ===== Animation =====
@@ -194,6 +193,16 @@ L2D_API intptr_t l2d_start_random_motion(L2D_Model m, const char* group, int pri
     return static_cast<intptr_t>(id);
 }
 
+L2D_API intptr_t l2d_start_motion_file(L2D_Model m, const char* path, int priority)
+{
+    if (m == NULL || path == NULL) return -1;
+    CubismMotionQueueEntryHandle handle = GetModel(m)->StartMotionFile(path, priority);
+    if (handle == InvalidMotionQueueEntryHandleValue) return -1;
+    int32_t id = g_nextMotionHandleId++;
+    g_motionHandleMap[id] = handle;
+    return static_cast<intptr_t>(id);
+}
+
 L2D_API bool l2d_is_motion_finished(L2D_Model m, intptr_t motionHandle)
 {
     if (m == NULL) return true;
@@ -208,6 +217,17 @@ L2D_API bool l2d_is_motion_finished(L2D_Model m, intptr_t motionHandle)
         g_motionHandleMap.erase(it);
     }
     return finished;
+}
+
+L2D_API void l2d_stop_all_motions(L2D_Model m)
+{
+    if (m == NULL) return;
+    // Clears the native motion queue immediately without fadeout.
+    // This is necessary when force-switching to an idle animation,
+    // because the SDK's StartMotion sets fadeout (not immediate removal)
+    // on existing motions, which causes old parameter values to leak
+    // into SaveParameters() during the fadeout frame.
+    GetModel(m)->StopAllNativeMotions();
 }
 
 // ===== Expression =====
@@ -660,4 +680,37 @@ L2D_API void l2d_reset_pose(L2D_Model m)
     {
         pose->Reset(model->GetModel());
     }
+}
+
+// ===== Physics Runtime Tuning =====
+
+L2D_API void l2d_set_physics_options(L2D_Model m, float gravityX, float gravityY, float windX, float windY)
+{
+    if (m == NULL) return;
+    GetModel(m)->SetPhysicsOptions(gravityX, gravityY, windX, windY);
+}
+
+L2D_API void l2d_get_physics_options(L2D_Model m, float* outGravityX, float* outGravityY, float* outWindX, float* outWindY)
+{
+    if (m == NULL)
+    {
+        if (outGravityX) *outGravityX = 0.0f;
+        if (outGravityY) *outGravityY = -1.0f;
+        if (outWindX) *outWindX = 0.0f;
+        if (outWindY) *outWindY = 0.0f;
+        return;
+    }
+    GetModel(m)->GetPhysicsOptions(outGravityX, outGravityY, outWindX, outWindY);
+}
+
+L2D_API void l2d_reset_physics(L2D_Model m)
+{
+    if (m == NULL) return;
+    GetModel(m)->ResetPhysics();
+}
+
+L2D_API void l2d_stabilize_physics(L2D_Model m)
+{
+    if (m == NULL) return;
+    GetModel(m)->StabilizePhysics();
 }

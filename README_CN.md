@@ -34,7 +34,7 @@ Live2D Cubism SDK for Haxe —— 多后端渲染抽象层，基于 CalcOnly 架
 │  L2DParts · FlxL2DGroup · L2DWavFileAudioSource      │  v0.9: Parts DSL + 多模型组
 │  L2DDebugOverlay · CLI                               │  + 调试覆盖层 + haxelib run CLI
 │  L2DAudioSourceBase · Heaps/FL/OpenFL AudioSource    │  v1.0: LipSync 后端特化
-│  L2DHeapsObject: 热重载 · filter chain               │  v1.0: Heaps DX 神器组合
+│  L2DHeapsObject: 热重载 · filter chain · physicsTuner  │  v1.0: Heaps DX 神器组合
 ├─────────────────────────────────────────────────────┤
 │  框架集成层                                          │
 │  L2DFlixelComponent / L2DHeapsObject / ...          │  适配特定游戏框架
@@ -951,14 +951,63 @@ source.update(dt);    // 推进 RMS 窗口以匹配 Channel.position
 lipSync.update(dt);   // 读振幅 → 写入嘴型参数
 ```
 
+### L2DPhysicsTuner — 运行时物理参数调节 (v1.0)
+
+运行时控制物理重力、风力、强度 —— 类似 VTube Studio 的 PhysicsSettings 面板。
+
+**两层控制：**
+1. **原生物理选项**（重力/风力向量）—— 通过 `L2DCore.setPhysicsOptions` 直接写入 SDK 的 `CubismPhysics` 实例。摆锤仿真每次评估都使用这些向量。
+2. **Haxe 侧强度混合**（`physicsStrength`）—— SDK 没有内置"物理强度倍率"，因此在 `core.update()` 前快照物理影响参数值，更新后在 pre/post 值之间插值。0.0 = 无物理，1.0 = 完整。
+
+```haxe
+import live2d.cubism.ext.L2DPhysicsTuner;
+
+var tuner = new L2DPhysicsTuner();
+tuner.attachTo(core, "path/to/model.physics3.json");
+tuner.setGravity(0, -1.5);   // 150% 重力
+tuner.setWind(0.3, 0);       // 轻微水平风
+tuner.physicsStrength = 0.5; // 50% 物理输出
+
+// 在更新循环中（包裹 core.update）：
+tuner.applyPreUpdate();
+core.update(dt);
+tuner.applyPostUpdate();
+
+// 重置 / 稳定：
+tuner.reset();      // 清除摆锤状态，恢复默认重力/风力
+tuner.stabilize();  // 单次收敛（模型加载后有用）
+```
+
+### L2DVTuberModel — VTube Studio 模型适配器 (v1.0)
+
+VTube Studio 模型格式（`.vtube.json`）的解析器和适配器。VTube Studio 模型与标准 Cubism 模型不同：表情和动作由 `.vtube.json` 的 Hotkeys 引用，而非 `model3.json` 的 FileReferences。`model3.json` 通常没有 `FileReferences.Motions` 或 `FileReferences.Expressions`。
+
+路径解析复现 VTube Studio 的行为：`.vtube.json` 的 Hotkey `File` 字段通常只包含裸文件名（如 `"scene01.motion3.json"`），即使实际文件在 `motion/` 等子目录中。`L2DVTuberModel` 扫描模型目录和 6 个常见子目录（`expressions/`、`expr/`、`motions/`、`motion/`、`animations/`、`animation/`），将每个 `File` 字段解析为模型目录的相对路径。
+
+```haxe
+import live2d.cubism.ext.L2DVTuberModel;
+
+var vtube = new L2DVTuberModel("path/to/model.vtube.json");
+var modelEntry = vtube.modelEntry;       // "model.model3.json"
+var idle = vtube.idleAnimation;          // "motion/idle.motion3.json" 或 null
+var exprs = vtube.getExpressions();      // [{name, file, hotkeyId}, ...]
+var motions = vtube.getMotions();        // [{name, file, hotkeyId}, ...]
+
+// 加载模型并使用解析后的路径：
+core.loadModel(dir, vtube.modelEntry, width, height);
+for (expr in exprs) {
+    core.loadExpressionFile(expr.file);
+}
+```
+
 ### Heaps 性能优化 (v1.0)
 
-v1.0 内置三项 Heaps 优化（无 API 变更，自动生效）：
+v1.0 内置四项 Heaps 优化（无 API 变更，自动生效）：
 
 - **sync 时序修复 (D1)** — `L2DHeapsObject.sync()` 现在先执行 `core.update+render` 再 `super.sync(ctx)`。h2d sync 是 top-down；旧顺序导致 `L2DMeshDrawable` 读到过时顶点计数并上传两次。现在 `draw` 只上传一次。
 - **GPU buffer 复用 (D2)** — `L2DMeshDrawable` 改用 grow-only `h3d.Buffer`（`Dynamic` + `RawFormat`），跨帧复用、仅容量增长时重分配。消除典型 130-drawable 模型的逐帧 buffer 分配。
 - **Mask RT 缓存池 (D3)** — `L2DHeapsMaskRTCache` 为每个并发模型分配独享 mask render-target；释放的 RT 按 `"WxH"` 为 key 归还池待复用。拒绝 refcount 单 RT 方案，因为并发模型会互相覆盖 mask 数据。
-- **Mask group 缓冲区隔离 (D4)** — 新增 `MeshPrimitive.invalidateBuffer()`，在 `renderMaskToBitmapData` 中为每个 mask group 强制分配独立 GPU 缓冲区。防止 OpenGL 数据竞争：group N 的 `glBufferSubData` 覆盖缓冲区时 group N−1 的 `glDrawElements` 仍在执行，导致 mask 形状渲染到错误位置（复现为右眼 mask 消失）。
+- **Mask group 缓冲区隔离 (D4)** — 3 个预分配独立 `maskDrawable`（每个 R/G/B mask 通道一个），各自拥有独立的 grow-only GPU 顶点缓冲区。Fallback 路径使用旋转池（`fallbackPool`）的独立 drawable。按构造消除 OpenGL 数据竞争 —— 每个通道的 `glBufferSubData` 不会与另一个通道的待执行 `glDrawElements` 冲突。Mask RT 使用 2× SSAA（`MASK_SSAA_FACTOR`）实现超采样边缘。
 
 ### 扩展层 API 参考
 
@@ -1079,6 +1128,10 @@ v1.0 内置三项 Heaps 优化（无 API 变更，自动生效）：
 | `model` | 底层 `L2DModel` 句柄 |
 | `modelDir`, `modelFileName` | 模型路径信息 |
 | `modelWidth`, `modelHeight` | 计算得到的模型边界 |
+| `physicsTuner` | 可选 `L2DPhysicsTuner`，运行时重力/风力/强度控制 (v1.0) |
+| `heapsRenderer` | `HeapsRenderer` 实例（用于性能面板等） (v1.0) |
+| `hotReloadEnabled` | 设为 `true` 开启模型文件 mtime 监听和自动重载 (v1.0) |
+| `addFilter(f)` / `removeFilter(f)` / `clearFilters()` / `getFilters()` | `h2d.filter.Group` 链式 API — Glow/Blur/Outline/ColorMatrix/DropShadow (v1.0) |
 
 > **变换**：通过 `l2d.core.x`、`l2d.core.y` 设置屏幕位置，`l2d.core.scale` 设置缩放，`l2d.core.alpha` 设置透明度。`h2d.Object` 自身的 `x`/`y`/`scaleX`/`scaleY`/`alpha` 保持为恒等值以避免双重变换。不要使用 `scaleX`/`scaleY` 或 `scale(v)` 方法。详见 [用法（Heaps 后端）→ 变换说明](#变换说明)。
 

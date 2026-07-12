@@ -12,7 +12,7 @@ live2d-haxe uses a **CalcOnly** architecture: the C++ native layer handles all c
 │  L2DMotionQueue · L2DLookAt · L2DLipSync            │  Optional, composable utilities
 │  L2DEventDispatcher · L2DModelConstants              │  Pure Haxe, depends only on L2DCore
 │  L2DAudioSourceBase + 3 backend AudioSources         │  v1.0: LipSync backend specialization
-│  L2DHeapsObject: hot-reload · filter chain           │  v1.0: Heaps DX combo
+│  L2DHeapsObject: hot-reload · filter chain · physicsTuner  │  v1.0: Heaps DX combo
 ├─────────────────────────────────────────────────────┤
 │  Framework Integration Layer                         │
 │  L2DFlixelComponent / L2DHeapsObject / ...          │  Adapts to specific game framework
@@ -35,21 +35,37 @@ live2d-haxe uses a **CalcOnly** architecture: the C++ native layer handles all c
 ```
 live2d.cubism
 ├── ext/                     # Extension Layer (v0.8+) — cross-backend utilities
-│   ├── L2DEvent.hx          # Event enum (6 variants)
+│   ├── L2DEvent.hx          # Event enum (7 variants including MotionUserData)
 │   ├── L2DEventDispatcher.hx  # Typed callback dispatcher with token unsubscribe
 │   ├── L2DMotionQueue.hx    # Motion priority queue + idle recovery
 │   ├── L2DLookAt.hx         # Damped mouse → head/eye follow
 │   ├── L2DLipSync.hx        # Audio-driven lip sync with attack/release
 │   ├── IL2DAudioSource.hx   # Audio amplitude interface
 │   ├── L2DCallbackAudioSource.hx  # Callback-based IL2DAudioSource
+│   ├── L2DWavFileAudioSource.hx   # Pure Haxe WAV decoder + RMS (#if sys)
+│   ├── L2DAudioSourceBase.hx      # Shared base for backend AudioSources (v1.0)
 │   ├── L2DModelConstants.hx # @:build macro: model3.json → compile-time constants
 │   ├── IL2DInputAdapter.hx  # Input adapter interface
+│   ├── L2DPartHandle.hx     # Part handle with chain DSL support
+│   ├── L2DParts.hx          # Part opacity chain DSL + tween (v0.9)
+│   ├── L2DPhysicsTuner.hx   # Runtime physics parameter tuning (v1.0)
+│   ├── L2DVTuberModel.hx    # VTube Studio model adapter (#if sys)
+│   ├── L2DDebugOverlay.hx   # Abstract debug overlay base (v0.9)
+│   ├── L2DPerfPanel.hx      # Abstract perf panel base (v1.1)
 │   ├── openfl/
-│   │   └── L2DOpenFLInputAdapter.hx  # MouseEvent adapter (#if openfl)
+│   │   ├── L2DOpenFLInputAdapter.hx   # MouseEvent adapter (#if openfl)
+│   │   ├── L2DOpenFLAudioSource.hx    # OpenFL AudioSource via SoundChannel (v1.0)
+│   │   ├── L2DOpenFLDebugOverlay.hx   # OpenFL debug overlay impl (v0.9)
+│   │   └── L2DOpenFLPerfPanel.hx      # OpenFL perf panel impl (v1.1)
 │   ├── flixel/
-│   │   └── L2DFlixelInputAdapter.hx  # FlxG.mouse polling adapter (#if flixel)
+│   │   ├── L2DFlixelInputAdapter.hx   # FlxG.mouse polling adapter (#if flixel)
+│   │   ├── L2DFlixelAudioSource.hx    # Flixel AudioSource via FlxSound (v1.0)
+│   │   └── L2DFlixelPerfPanel.hx      # Flixel perf panel impl (v1.1)
 │   └── heaps/
-│       └── L2DHeapsInputAdapter.hx   # hxd.Stage event adapter (#if heaps)
+│       ├── L2DHeapsInputAdapter.hx    # hxd.Stage event adapter (#if heaps)
+│       ├── L2DHeapsAudioSource.hx     # Heaps AudioSource via hxd.snd.Channel (v1.0)
+│       ├── L2DHeapsDebugOverlay.hx    # Heaps debug overlay impl (v0.9)
+│       └── L2DHeapsPerfPanel.hx       # Heaps perf panel impl (v1.1)
 ├── core/                    # Platform-agnostic core
 │   ├── L2DModel.hx          # Model handle type (#if cpp)
 │   ├── ICubismBridge.hx     # Native bridge interface (46 methods)
@@ -67,6 +83,7 @@ live2d.cubism
 │   └── heaps/
 │       ├── HeapsRenderer.hx       # Heaps implementation (#if heaps)
 │       ├── L2DMeshDrawable.hx     # h2d.Drawable mesh wrapper (#if heaps)
+│       ├── L2DHeapsMaskRTCache.hx # Mask RT pool (one per concurrent model) (v1.0)
 │       ├── CubismHeapsShader.hx   # Mask + color + opacity shader (#if heaps)
 │       └── CubismMaskShader.hx    # Solid-color fill shader for mask RT (#if heaps)
 ├── flixel/                  # Flixel framework integration
@@ -170,6 +187,11 @@ The Extension Layer provides high-level utilities that reduce boilerplate for co
 | `L2DLipSync` | Audio → mouth sync with attack/release smoothing | `setLipSyncValue`, `setLipSyncEnabled` |
 | `L2DEventDispatcher` | Typed event subscription with token unsubscribe | `hitTest` (for `hitTestAreas`) |
 | `L2DModelConstants` | `@:build` macro: model3.json → compile-time constants | None (pure macro) |
+| `L2DParts` | Part opacity chain DSL + tween | `getPartCount`, `getPartId`, `setPartOpacity` |
+| `L2DPhysicsTuner` | Runtime gravity/wind/strength control | `setPhysicsOptions`, `resetPhysics`, `stabilizePhysics` |
+| `L2DVTuberModel` | VTube Studio .vtube.json parser + adapter | `loadExpressionFile`, `applyExpressionFile` |
+| `L2DDebugOverlay` | Bounds/params/hit-area visualization (abstract + backends) | `findParameterIndex`, `getParameterValue` |
+| `L2DPerfPanel` | Frame time/batch/mask RT stats overlay (abstract + backends) | None (reads L2DCore stats) |
 
 ### Abstraction Interfaces
 
@@ -220,11 +242,11 @@ Three internal invariants the Heaps backend relies on as of v1.0. These are not 
 
 ### Mask Group Buffer Isolation (D4)
 
-All mask groups in `renderMaskToBitmapData` share one reusable `maskDrawable` and its `MeshPrimitive`. **Each group must use an independent GPU vertex buffer** — call `maskDrawable.primitive.invalidateBuffer()` after each group's draw to force a fresh buffer allocation on the next `updateMesh` → `flush`.
+`HeapsRenderer` pre-allocates **3 independent `maskDrawables`** (one per R/G/B mask channel) in the constructor. Each channel owns a grow-only `L2DMeshDrawable` with its own `MeshPrimitive` and GPU vertex buffer. The fallback path (`drawSolidTriangles`) uses a **rotating pool** (`fallbackPool`) of independent drawables — each `drawSolidTriangles` call within a frame gets a unique drawable from the pool, so no two GPU operations share the same buffer.
 
-**Why:** Without isolation, OpenGL's asynchronous pipeline creates a data race. Group 0 draws with its vertices, then group 1's `updateMesh` → `uploadVector` calls `glBufferSubData` on the *same* GPU buffer. If the GPU hasn't finished group 0's `glDrawElements`, it reads group 1's vertices for group 0's geometry. In practice this manifests as mask shapes rendering at wrong positions (e.g., left-eye green pixels at right-eye X coordinates on the mask RT, causing the right eye to sample an empty mask channel and disappear).
+**Why:** The original design shared one `maskDrawable` across all mask groups and called `invalidateBuffer()` (dispose + reallocate) between groups to avoid GPU data races. This worked but was wasteful — every group transition destroyed and re-allocated a GPU buffer. The current design eliminates the race entirely by construction: each channel has its own buffer, so `glBufferSubData` on channel R's buffer cannot race with a pending `glDrawElements` on channel G's buffer. Buffers grow as needed and are reused across frames — no per-frame allocation, no dispose/reallocate cycle.
 
-`invalidateBuffer()` disposes the current GPU buffer object and clears the reference, so the next `flush()` allocates a brand-new buffer — guaranteeing that in-flight draws on the old buffer complete before any new data is written. Called at the end of `drawSolidTriangles` too to prevent cross-call races between the fallback path and `renderMaskToBitmapData`.
+**Mask SSAA:** The physical mask RT is `MASK_SSAA_FACTOR` (2×) larger than the logical mask dimensions, and vertex positions are scaled up by the same factor. This provides supersampled mask edges when the RT is sampled with bilinear filtering at the model's native resolution.
 
 ## Audio Source Pattern (v1.0)
 

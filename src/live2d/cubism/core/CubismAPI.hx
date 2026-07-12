@@ -76,8 +76,14 @@ class CubismAPI
     public static function startRandomMotion(model:L2DModel, group:String, priority:Int):Int
         return getBridge().startRandomMotion(model, group, priority);
 
+    public static function startMotionFile(model:L2DModel, path:String, priority:Int):Int
+        return getBridge().startMotionFile(model, path, priority);
+
     public static function isMotionFinished(model:L2DModel, handle:Int):Bool
         return getBridge().isMotionFinished(model, handle);
+
+    public static function stopAllMotions(model:L2DModel):Void
+        getBridge().stopAllMotions(model);
 
     // ===== Expression =====
 
@@ -115,27 +121,6 @@ class CubismAPI
     public static function getDrawableIndices(model:L2DModel, i:Int, out:Bytes):Void
         getBridge().getDrawableIndices(model, i, out);
 
-    public static function getDrawableOpacity(model:L2DModel, i:Int):Float
-        return getBridge().getDrawableOpacity(model, i);
-
-    public static function getDrawableRenderOrder(model:L2DModel, i:Int):Int
-        return getBridge().getDrawableRenderOrder(model, i);
-
-    public static function getDrawableTextureIndex(model:L2DModel, i:Int):Int
-        return getBridge().getDrawableTextureIndex(model, i);
-
-    public static function isDrawableVisible(model:L2DModel, i:Int):Bool
-        return getBridge().isDrawableVisible(model, i);
-
-    public static function getDrawableMultiplyColor(model:L2DModel, i:Int, out:Bytes):Void
-        getBridge().getDrawableMultiplyColor(model, i, out);
-
-    public static function getDrawableScreenColor(model:L2DModel, i:Int, out:Bytes):Void
-        getBridge().getDrawableScreenColor(model, i, out);
-
-    public static function getDrawableBlendMode(model:L2DModel, i:Int):Int
-        return getBridge().getDrawableBlendMode(model, i);
-
     // ===== Mask =====
 
     public static function getDrawableMaskCount(model:L2DModel, i:Int):Int
@@ -146,9 +131,6 @@ class CubismAPI
 
     public static function getDrawableInvertedMask(model:L2DModel, i:Int):Bool
         return getBridge().getDrawableInvertedMask(model, i);
-
-    public static function isDrawableVertexPositionsDidChange(model:L2DModel, i:Int):Bool
-        return getBridge().isDrawableVertexPositionsDidChange(model, i);
 
     // ===== Batch =====
 
@@ -239,4 +221,19 @@ class CubismAPI
 
     public static function resetPose(model:L2DModel):Void
         getBridge().resetPose(model);
+
+    // ===== Physics Runtime Tuning =====
+
+    public static function setPhysicsOptions(model:L2DModel, gravityX:Float, gravityY:Float, windX:Float, windY:Float):Void
+        getBridge().setPhysicsOptions(model, gravityX, gravityY, windX, windY);
+
+    // out: pre-allocated Bytes of length 16, filled with [gx, gy, wx, wy] as float32 LE
+    public static function getPhysicsOptions(model:L2DModel, out:Bytes):Void
+        getBridge().getPhysicsOptions(model, out);
+
+    public static function resetPhysics(model:L2DModel):Void
+        getBridge().resetPhysics(model);
+
+    public static function stabilizePhysics(model:L2DModel):Void
+        getBridge().stabilizePhysics(model);
 }

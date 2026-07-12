@@ -55,11 +55,6 @@ void LAppPal_CalcOnly::PrintMessage(const Csm::csmChar* message)
     PrintLog("%s", message);
 }
 
-void LAppPal_CalcOnly::PrintMessageLn(const Csm::csmChar* message)
-{
-    PrintLogLn("%s", message);
-}
-
 Csm::csmByte* LAppPal_CalcOnly::LoadFileAsBytes(const std::string filePath, Csm::csmSizeInt* outSize)
 {
     int size = 0;
@@ -97,14 +92,4 @@ Csm::csmByte* LAppPal_CalcOnly::LoadFileAsBytes(const std::string filePath, Csm:
 void LAppPal_CalcOnly::ReleaseBytes(Csm::csmByte* byteData)
 {
     delete[] byteData;
-}
-
-bool LAppPal_CalcOnly::ConvertMultiByteToWide(const csmChar* multiByte, wchar_t* wide, int wideSize)
-{
-    return MultiByteToWideChar(CP_UTF8, 0U, multiByte, -1, wide, wideSize) != 0;
-}
-
-bool LAppPal_CalcOnly::ConvertWideToMultiByte(const wchar_t* wide, csmChar* multiByte, int multiByteSize)
-{
-    return WideCharToMultiByte(CP_UTF8, 0U, wide, -1, multiByte, multiByteSize, NULL, NULL) != 0;
 }

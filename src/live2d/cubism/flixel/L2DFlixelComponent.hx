@@ -11,8 +11,8 @@ import live2d.cubism.L2DCore;
 import live2d.cubism.backend.L2DDisplayHandle;
 import live2d.cubism.backend.L2DTextureHandle;
 import live2d.cubism.backend.openfl.OpenFLRenderer;
-import live2d.cubism.core.CubismAPI;
 import live2d.cubism.core.L2DModel;
+import live2d.cubism.ext.L2DPhysicsTuner;
 
 /**
  * Flixel integration for Live2D models.
@@ -21,18 +21,19 @@ import live2d.cubism.core.L2DModel;
 class L2DFlixelComponent extends FlxBasic
 {
     public var core:L2DCore;
+    /** Optional physics tuner for runtime gravity/wind/strength adjustment. */
+    public var physicsTuner:L2DPhysicsTuner;
 
     public function new(dir:String, fileName:String)
     {
         super();
 
-        var bridge = CubismAPI.getBridge();
         var renderer = new OpenFLRenderer(
             flixelTextureLoader,
             flixelTextureDestroyer,
             flixelTextureToBitmapData
         );
-        core = new L2DCore(dir, fileName, bridge, renderer);
+        core = new L2DCore(dir, fileName, renderer);
     }
 
     // ===== Flixel lifecycle =====
@@ -40,7 +41,9 @@ class L2DFlixelComponent extends FlxBasic
     override function update(elapsed:Float):Void
     {
         super.update(elapsed);
+        if (physicsTuner != null) physicsTuner.applyPreUpdate();
         core.update(elapsed);
+        if (physicsTuner != null) physicsTuner.applyPostUpdate();
     }
 
     override function destroy():Void

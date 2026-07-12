@@ -952,14 +952,63 @@ source.update(dt);    // advance RMS window to match Channel.position
 lipSync.update(dt);   // read amplitude → write mouth param
 ```
 
+### L2DPhysicsTuner — Runtime Physics Parameter Tuning (v1.0)
+
+Runtime control over physics gravity, wind, and strength — similar to VTube Studio's PhysicsSettings panel.
+
+**Two layers of control:**
+1. **Native physics options** (gravity/wind vectors) — applied directly to the SDK's `CubismPhysics` instance via `L2DCore.setPhysicsOptions`. The pendulum simulation uses these vectors on every evaluation.
+2. **Haxe-side strength blending** (`physicsStrength`) — since the SDK has no built-in "physics strength multiplier", we snapshot physics-affected parameter values before `core.update()`, then blend between pre/post values after the update. 0.0 = no physics, 1.0 = full.
+
+```haxe
+import live2d.cubism.ext.L2DPhysicsTuner;
+
+var tuner = new L2DPhysicsTuner();
+tuner.attachTo(core, "path/to/model.physics3.json");
+tuner.setGravity(0, -1.5);   // 150% gravity
+tuner.setWind(0.3, 0);       // light horizontal wind
+tuner.physicsStrength = 0.5; // 50% physics output
+
+// In update loop (wrapping core.update):
+tuner.applyPreUpdate();
+core.update(dt);
+tuner.applyPostUpdate();
+
+// Reset / Stabilize:
+tuner.reset();      // clear pendulum state, restore default gravity/wind
+tuner.stabilize();  // single-shot settle (useful after model load)
+```
+
+### L2DVTuberModel — VTube Studio Model Adapter (v1.0)
+
+Parser and adapter for VTube Studio model format (`.vtube.json`). VTube Studio models differ from standard Cubism models: expressions and motions are referenced from `.vtube.json` Hotkeys, NOT from `model3.json` FileReferences. The `model3.json` typically has no `FileReferences.Motions` or `FileReferences.Expressions`.
+
+Path resolution replicates VTube Studio's behavior: `.vtube.json` Hotkey `File` fields often contain only a bare filename (e.g. `"scene01.motion3.json"`), even when the actual file is in a subdirectory like `motion/`. `L2DVTuberModel` scans the model directory and 6 common subdirectories (`expressions/`, `expr/`, `motions/`, `motion/`, `animations/`, `animation/`) to resolve each `File` field to a path relative to the model directory.
+
+```haxe
+import live2d.cubism.ext.L2DVTuberModel;
+
+var vtube = new L2DVTuberModel("path/to/model.vtube.json");
+var modelEntry = vtube.modelEntry;       // "model.model3.json"
+var idle = vtube.idleAnimation;          // "motion/idle.motion3.json" or null
+var exprs = vtube.getExpressions();      // [{name, file, hotkeyId}, ...]
+var motions = vtube.getMotions();        // [{name, file, hotkeyId}, ...]
+
+// Load model and use resolved paths:
+core.loadModel(dir, vtube.modelEntry, width, height);
+for (expr in exprs) {
+    core.loadExpressionFile(expr.file);
+}
+```
+
 ### Heaps Performance Optimizations (v1.0)
 
-Three internal Heaps optimizations ship in v1.0 (no API change, automatic):
+Four internal Heaps optimizations ship in v1.0 (no API change, automatic):
 
 - **Sync ordering fix (D1)** — `L2DHeapsObject.sync()` now runs `core.update+render` before `super.sync(ctx)`. h2d sync is top-down; the old order caused `L2DMeshDrawable` to read stale vertex counts and upload twice. Now `draw` uploads exactly once.
 - **GPU buffer reuse (D2)** — `L2DMeshDrawable` uses a grow-only `h3d.Buffer` (`Dynamic` + `RawFormat`), reused across frames and reallocated only on capacity growth. Eliminates per-frame buffer allocation for the typical 130-drawable model.
 - **Mask RT cache pool (D3)** — `L2DHeapsMaskRTCache` gives each concurrent model its own mask render-target; released RTs return to a pool keyed by `"WxH"` for reuse. A refcount single-RT was rejected because concurrent models would overwrite each other's mask data.
-- **Mask group buffer isolation (D4)** — Added `MeshPrimitive.invalidateBuffer()` to force independent GPU buffer allocation per mask group in `renderMaskToBitmapData`. Prevents an OpenGL data race where `glBufferSubData` from group N overwrites the buffer while group N−1's `glDrawElements` is in-flight, causing mask shapes to render at wrong positions (reproduced as right-eye mask disappearance).
+- **Mask group buffer isolation (D4)** — 3 pre-allocated independent `maskDrawable`s (one per R/G/B mask channel), each with its own grow-only GPU vertex buffer. The fallback path uses a rotating pool (`fallbackPool`) of independent drawables. This eliminates the OpenGL data race by construction — each channel's `glBufferSubData` cannot race with a pending `glDrawElements` on a different channel's buffer. Mask RT uses 2× SSAA (`MASK_SSAA_FACTOR`) for supersampled edges.
 
 ### Extension Layer API Reference
 
@@ -1080,6 +1129,10 @@ Auto-updates and renders in `sync(ctx)` — no manual `update`/`render` calls ne
 | `model` | Underlying `L2DModel` handle |
 | `modelDir`, `modelFileName` | Model path info |
 | `modelWidth`, `modelHeight` | Computed model bounds |
+| `physicsTuner` | Optional `L2DPhysicsTuner` for runtime gravity/wind/strength control (v1.0) |
+| `heapsRenderer` | `HeapsRenderer` instance (for perf panels, etc.) (v1.0) |
+| `hotReloadEnabled` | Set `true` to watch model files for mtime changes and auto-reload (v1.0) |
+| `addFilter(f)` / `removeFilter(f)` / `clearFilters()` / `getFilters()` | `h2d.filter.Group` chain API — Glow/Blur/Outline/ColorMatrix/DropShadow (v1.0) |
 
 > **Transform**: Set `l2d.core.x`, `l2d.core.y` for screen position, `l2d.core.scale` for scale, and `l2d.core.alpha` for opacity. `h2d.Object`'s own `x`/`y`/`scaleX`/`scaleY`/`alpha` are kept at identity to avoid double-transform. Do NOT use `scaleX`/`scaleY` or `scale(v)` method. See [Usage (Heaps Backend) → Transform Note](#transform-note).
 

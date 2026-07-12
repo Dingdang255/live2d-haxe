@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-07-13
+
+### v1.1.0 — Perf panel + VTuber model adapter + Physics tuner + Mask SSAA + Demo polish
+
+**One-line:** New features: cross-backend performance panel (`L2DPerfPanel` + 3 implementations), VTube Studio model adapter (`L2DVTuberModel` with subdir scanning), runtime physics tuner (`L2DPhysicsTuner` with gravity/wind/strength control), mask RT 2× SSAA, and demo polish (dynamic statusText Y). No breaking changes.
+
+**Full description:**
+
+This release adds four new extension-layer utilities and one internal Heaps optimization. All changes are additive — no existing API is removed or renamed.
+
+- **A3. Performance Panel** — New `ext/L2DPerfPanel.hx` abstract base class plus three backend implementations: `L2DHeapsPerfPanel` (h2d.Text), `L2DOpenFLPerfPanel` (TextField), `L2DFlixelPerfPanel` (FlxText). Displays frame time, draw calls, batch count, mask RT size, model info, and enabled modules. Auto-hooks to `L2DCore` + renderer for real-time stats.
+- **P1b. VTube Studio Model Adapter** — New `ext/L2DVTuberModel.hx` parses `.vtube.json` files used by VTube Studio. Extracts `FileReferences.Model`, `FileReferences.IdleAnimation`, and `Hotkeys[]` (ToggleExpression / TriggerAnimation). Implements `buildFileMap()` to scan the model directory + 6 common subdirectories (`expressions/`, `expr/`, `motions/`, `motion/`, `animations/`, `animation/`) and `resolveFilePath()` to map bare filenames to relative paths. Works with `L2DCore.loadExpressionFile()` / `applyExpressionFile()`.
+- **P2. Physics Tuner** — New `ext/L2DPhysicsTuner.hx` provides runtime control over physics parameters. Two layers: (1) native physics options via `setGravity()`/`setWind()`/`reset()`/`stabilize()` — directly writes to SDK's `CubismPhysics::_options`; (2) Haxe-side strength blending via `physicsStrength` (0.0–1.0) — snapshots physics-affected parameter values before/after `core.update()` and interpolates. Parses `.physics3.json` metadata (FPS, input/output counts, setting names). Native layer adds 4 C APIs: `l2d_set_physics_options`, `l2d_get_physics_options`, `l2d_reset_physics`, `l2d_stabilize_physics`.
+- **D6. Mask SSAA** — Heaps mask RT now uses 2× supersampling (`MASK_SSAA_FACTOR = 2`). Physical RT dimensions are doubled, vertex positions scaled up, and bilinear filtering during sampling produces smooth mask edges.
+- **D3. Demo Polish** — `HeapsDemo.hx` and `L2DDemoState.hx` now compute `statusText.y` dynamically from `infoText.textHeight` / `infoText.height`, preventing overlap when info text varies.
+- **Architecture Doc Update** — `ARCHITECTURE.md` D4 section updated to reflect current implementation (3 pre-allocated independent maskDrawables + fallbackPool) instead of old `invalidateBuffer()` approach. README.md/README_CN.md expanded with L2DPhysicsTuner and L2DVTuberModel documentation sections.
+- **Cleanup** — Removed unused `live2d_capi.def` (module definition file no longer needed; DLL exports declared inline in source). Updated `CMakeLists.txt` to remove the DEF file reference.
+
+---
+
+### v1.1.0 — 性能面板 + VTuber 模型适配器 + 物理调优器 + Mask SSAA + Demo 打磨
+
+**一行描述：** 新增跨后端性能面板（`L2DPerfPanel` + 3 个实现）、VTube Studio 模型适配器（`L2DVTuberModel` 子目录扫描）、运行时物理调优器（`L2DPhysicsTuner` 重力/风力/强度控制）、Mask RT 2× SSAA，以及 Demo 打磨（动态 statusText Y）。无破坏性变更。
+
+**完整描述：**
+
+本版本新增四个扩展层工具和一项 Heaps 内部优化。所有改动都是新增——不删除、不重命名任何既有 API。
+
+- **A3. 性能面板** — 新增 `ext/L2DPerfPanel.hx` 抽象基类 + 三个后端实现：`L2DHeapsPerfPanel`（h2d.Text）、`L2DOpenFLPerfPanel`（TextField）、`L2DFlixelPerfPanel`（FlxText）。显示帧时间、draw call 数、batch 数、mask RT 尺寸、模型信息、启用模块。自动挂载到 `L2DCore` + 渲染器实时采集统计。
+- **P1b. VTube Studio 模型适配器** — 新增 `ext/L2DVTuberModel.hx`，解析 VTube Studio 使用的 `.vtube.json` 文件。提取 `FileReferences.Model`、`FileReferences.IdleAnimation`、`Hotkeys[]`（ToggleExpression / TriggerAnimation）。实现 `buildFileMap()` 扫描模型目录 + 6 个常见子目录（`expressions/`、`expr/`、`motions/`、`motion/`、`animations/`、`animation/`），`resolveFilePath()` 将裸文件名映射为相对路径。与 `L2DCore.loadExpressionFile()` / `applyExpressionFile()` 配合使用。
+- **P2. 物理调优器** — 新增 `ext/L2DPhysicsTuner.hx`，提供运行时物理参数控制。两层： (1) 原生物理选项 `setGravity()`/`setWind()`/`reset()`/`stabilize()` —— 直接写入 SDK 的 `CubismPhysics::_options`；(2) Haxe 侧强度混合 `physicsStrength`（0.0–1.0）—— 在 `core.update()` 前后快照物理影响参数并插值。解析 `.physics3.json` 元数据（FPS、输入/输出计数、设置名称）。Native 层新增 4 个 C API：`l2d_set_physics_options`、`l2d_get_physics_options`、`l2d_reset_physics`、`l2d_stabilize_physics`。
+- **D6. Mask SSAA** — Heaps mask RT 现在使用 2× 超采样（`MASK_SSAA_FACTOR = 2`）。物理 RT 尺寸翻倍，顶点坐标等比放大，采样时双线性过滤产生平滑的 mask 边缘。
+- **D3. Demo 打磨** — `HeapsDemo.hx` 和 `L2DDemoState.hx` 现在动态计算 `statusText.y`（基于 `infoText.textHeight` / `infoText.height`），避免信息文本变化时重叠。
+- **架构文档更新** — `ARCHITECTURE.md` D4 节更新为当前实现（3 个预分配独立 maskDrawable + fallbackPool），替换旧的 `invalidateBuffer()` 描述。README.md/README_CN.md 新增 L2DPhysicsTuner 和 L2DVTuberModel 文档节。
+- **清理** — 移除无用的 `live2d_capi.def`（模块定义文件不再需要；DLL 导出已在源码中内联声明）。更新 `CMakeLists.txt` 移除 DEF 文件引用。
+
 ## [1.0.0] - 2026-07-09
 
 ### v1.0.0 — First stable release: Heaps performance + DX combo + LipSync backend specialization

@@ -12,18 +12,19 @@ import hxsl.Shader;
  *   2. Mask texture sampling (u_useMask > 0.5)
  *   3. Per-drawable opacity (u_opacity < 1.0)
  *
- * Uses hxsl SRC syntax. Priority is set to 200 so this shader's fragment()
- * runs BEFORE Base2d.fragment() (priority=100). This way we can modify
- * `pixelColor` and Base2d will write `output.color = pixelColor` with the
- * modified value.
+ * Blend-mode-specific handling:
  *
- * Vertex stage:
- *   1. Base2d.__init__ sets absolutePosition, pixelColor (texture * color)
- *   2. CubismHeapsShader.vertex: compute v_maskUV from absolutePosition
- *   3. Base2d.vertex: transform absolutePosition to clip space
- * Fragment stage (by priority desc):
- *   1. CubismHeapsShader.fragment: apply color/mask/opacity to pixelColor
- *   2. Base2d.fragment: output.color = pixelColor
+ *   Multiply (convertPremul=0): GPU blend is dst * src.rgb (GL_DST_COLOR, GL_ZERO,
+ *     alpha ignored). Premultiplied→non-premultiplied conversion always happens
+ *     FIRST (even without mask), so transparent areas become white (= no multiply
+ *     effect). Mask then lerps RGB toward white. Alpha set to 1.
+ *
+ *   Alpha/Add (convertPremul=1): GPU blends use src.a to scale RGB. Mask scales
+ *     alpha only; premul→non-premul conversion happens at the end so the GPU
+ *     receives non-premultiplied RGB with correctly-scaled alpha.
+ *
+ *   Screen (convertPremul=0): GPU blend is src + (1-src.rgb)*dst. Same as
+ *     Multiply path for premul conversion and mask.
  */
 class CubismHeapsShader extends Shader
 {
@@ -38,15 +39,11 @@ class CubismHeapsShader extends Shader
         @param var u_scrColor : Vec3;
         @param var u_useColor : Float;
         @param var u_opacity : Float;
+        @param var u_convertPremul : Float;
 
-        // Shared variables from Base2d (read-only here)
         var absolutePosition : Vec4;
         var pixelColor : Vec4;
 
-        // Explicit varying for mask UV — computed in vertex stage, interpolated in fragment.
-        // Using vertex() instead of __init__() because vertex() is guaranteed to run in the
-        // vertex stage, and absolutePosition is definitely available there (Base2d.vertex
-        // reads it). In __init__, the stage assignment depends on Linker dependency analysis.
         @var var v_maskUV : Vec2;
 
         function vertex() {
@@ -54,32 +51,67 @@ class CubismHeapsShader extends Shader
         }
 
         function fragment() {
-            // Multiply/Screen color blending (only when u_useColor > 0.5)
+            // Multiply/Screen color blending (expects premultiplied values)
             if (u_useColor > 0.5) {
                 pixelColor.rgb = pixelColor.rgb * u_mulColor + u_scrColor * (1.0 - pixelColor.rgb);
             }
 
-            // Mask texture sampling
-            // Heaps BlendMode.Alpha = SrcAlpha * Src + (1-SrcA) * Dst (non-premultiplied)
-            // Only scale alpha; RGB scaling would cause double-darkening during blend.
+            // Multiply/Screen: always convert premul -> non-premul.
+            // Multiply blend (GL_DST_COLOR,GL_ZERO) ignores alpha, so we MUST
+            // convert or transparent premul pixels (rgb≈0) would multiply dst to black.
+            // Transparent areas output white = no multiply effect.
+            if (u_convertPremul < 0.5) {
+                if (pixelColor.a > 0.001) {
+                    pixelColor.rgb /= pixelColor.a;
+                } else {
+                    pixelColor.rgb = vec3(1.0, 1.0, 1.0);
+                }
+                pixelColor.a = 1.0;
+            }
+
+            // Mask texture sampling.
             if (u_useMask > 0.5) {
                 var clipMask = u_maskTexture.get(v_maskUV);
                 var maskVal = dot(clipMask, u_channelFlag);
                 maskVal = mix(maskVal, 1.0 - maskVal, u_isInverted);
-                pixelColor.a *= maskVal;
+
+                if (u_convertPremul < 0.5) {
+                    // Multiply/Screen: mask lerps non-premul RGB toward white
+                    // (mask=0 -> white -> no multiply/screen effect)
+                    pixelColor.rgb = mix(vec3(1.0, 1.0, 1.0), pixelColor.rgb, maskVal);
+                } else {
+                    // Alpha/Add: mask scales alpha only.
+                    // GPU blend uses src.a to scale RGB, so mask=0 -> alpha=0 -> no contribution.
+                    pixelColor.a *= maskVal;
+                }
             }
 
-            // Per-drawable opacity: only scale alpha (non-premultiplied blend mode)
-            pixelColor.a *= u_opacity;
+            // Per-drawable opacity.
+            // For Multiply/Screen: alpha was set to 1 above, so opaque non-premul pixels
+            //   scale uniformly — opacity just fades alpha toward 0. Correct.
+            // For Alpha/Add: pixelColor is still premultiplied, so we must scale
+            //   RGB along with alpha to keep the premul ratio consistent. Otherwise
+            //   the premul→non-premul division below would amplify RGB (white bug).
+            if (u_opacity < 0.999) {
+                pixelColor.a *= u_opacity;
+                if (u_convertPremul > 0.5) {
+                    pixelColor.rgb *= u_opacity;
+                }
+            }
+
+            // Convert premultiplied -> non-premultiplied for Alpha/Add.
+            // Multiply already converted above.
+            if (u_convertPremul > 0.5 && pixelColor.a > 0.0) {
+                pixelColor.rgb /= pixelColor.a;
+            }
+
         }
     };
 
     public function new()
     {
         super();
-        // Run before Base2d (priority=100) so we can modify pixelColor
         setPriority(200);
-        // Default uniform values
         u_channelFlag.set(1, 0, 0, 0);
         u_maskOffset.set(0, 0);
         u_maskScale.set(1, 1);
@@ -89,6 +121,7 @@ class CubismHeapsShader extends Shader
         u_scrColor.set(0, 0, 0);
         u_useColor = 0;
         u_opacity = 1;
+        u_convertPremul = 1; // Alpha/Add by default
     }
 }
 

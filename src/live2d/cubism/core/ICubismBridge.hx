@@ -31,7 +31,9 @@ interface ICubismBridge
     // Animation
     function startMotion(model:L2DModel, group:String, no:Int, priority:Int):Int;
     function startRandomMotion(model:L2DModel, group:String, priority:Int):Int;
+    function startMotionFile(model:L2DModel, path:String, priority:Int):Int;
     function isMotionFinished(model:L2DModel, handle:Int):Bool;
+    function stopAllMotions(model:L2DModel):Void;
 
     // Expression
     function setExpression(model:L2DModel, expressionID:String):Void;
@@ -48,19 +50,11 @@ interface ICubismBridge
     function getDrawableVertexUvs(model:L2DModel, i:Int, out:Bytes):Void;
     function getDrawableIndexCount(model:L2DModel, i:Int):Int;
     function getDrawableIndices(model:L2DModel, i:Int, out:Bytes):Void;
-    function getDrawableOpacity(model:L2DModel, i:Int):Float;
-    function getDrawableRenderOrder(model:L2DModel, i:Int):Int;
-    function getDrawableTextureIndex(model:L2DModel, i:Int):Int;
-    function isDrawableVisible(model:L2DModel, i:Int):Bool;
-    function getDrawableMultiplyColor(model:L2DModel, i:Int, out:Bytes):Void;
-    function getDrawableScreenColor(model:L2DModel, i:Int, out:Bytes):Void;
-    function getDrawableBlendMode(model:L2DModel, i:Int):Int;
 
     // Mask
     function getDrawableMaskCount(model:L2DModel, i:Int):Int;
     function getDrawableMasks(model:L2DModel, i:Int, out:Bytes):Void;
     function getDrawableInvertedMask(model:L2DModel, i:Int):Bool;
-    function isDrawableVertexPositionsDidChange(model:L2DModel, i:Int):Bool;
 
     // Batch
     function getDrawableBatchMetadata(model:L2DModel, count:Int, out:Bytes):Void;
@@ -98,6 +92,12 @@ interface ICubismBridge
 
     // Pose reset
     function resetPose(model:L2DModel):Void;
+
+    // Physics runtime tuning
+    function setPhysicsOptions(model:L2DModel, gravityX:Float, gravityY:Float, windX:Float, windY:Float):Void;
+    function getPhysicsOptions(model:L2DModel, out:Bytes):Void;
+    function resetPhysics(model:L2DModel):Void;
+    function stabilizePhysics(model:L2DModel):Void;
 
     // Moc version checking
     function getCoreVersion():Int;

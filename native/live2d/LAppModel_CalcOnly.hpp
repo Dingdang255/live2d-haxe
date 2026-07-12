@@ -58,6 +58,20 @@ public:
         Csm::ACubismMotion::BeganMotionCallback onBeganMotionHandler = NULL);
 
     /**
+     * Start playing a motion from an arbitrary file path.
+     * Unlike StartMotion, this does NOT require the motion to be registered
+     * in model3.json's FileReferences.Motions. The path can be absolute
+     * or relative (resolved relative to the model's home directory if
+     * not absolute).
+     *
+     * This is used for VTuber-style models where motions are standalone
+     * .motion3.json files referenced from .vtube.json Hotkeys.
+     */
+    Csm::CubismMotionQueueEntryHandle StartMotionFile(const Csm::csmChar* path, Csm::csmInt32 priority,
+        Csm::ACubismMotion::FinishedMotionCallback onFinishedMotionHandler = NULL,
+        Csm::ACubismMotion::BeganMotionCallback onBeganMotionHandler = NULL);
+
+    /**
      * Set the expression motion specified by argument
      */
     void SetExpression(const Csm::csmChar* expressionID);
@@ -78,11 +92,6 @@ public:
     Csm::csmBool IsMotionFinished(Csm::CubismMotionQueueEntryHandle motionHandle);
 
     /**
-     * Check .moc3 file consistency
-     */
-    Csm::csmBool HasMocConsistencyFromFile(const Csm::csmChar* mocFileName);
-
-    /**
      * Get texture count
      */
     Csm::csmInt32 GetTextureCount();
@@ -101,6 +110,23 @@ public:
      * Expose pose pointer for ResetPose C API.
      */
     Csm::CubismPose* GetPose() const { return _pose; }
+
+    /**
+     * Immediately stop all motions in the native queue without fadeout.
+     * Used when force-switching to idle to prevent stale parameter values.
+     */
+    void StopAllNativeMotions() { _motionManager->StopAllMotions(); }
+
+    // ===== Physics runtime tuning (wraps CubismPhysics SDK API) =====
+    // Exposes SetOptions/GetOptions/Reset/Stabilization from CubismPhysics
+    // so the Haxe layer can adjust gravity/wind at runtime and reset/stabilize
+    // the pendulum simulation without reloading the model.
+    void SetPhysicsOptions(Csm::csmFloat32 gravityX, Csm::csmFloat32 gravityY,
+                           Csm::csmFloat32 windX, Csm::csmFloat32 windY);
+    void GetPhysicsOptions(Csm::csmFloat32* outGravityX, Csm::csmFloat32* outGravityY,
+                           Csm::csmFloat32* outWindX, Csm::csmFloat32* outWindY) const;
+    void ResetPhysics();
+    void StabilizePhysics();
 
 protected:
     /**
@@ -182,13 +208,4 @@ public:
 
     // External lip sync value (0~1, set <0 to revert to wav file handler)
     void SetLipSyncValue(Csm::csmFloat32 value);
-
-    // Query enabled state
-    Csm::csmBool IsBreathEnabled() const;
-    Csm::csmBool IsEyeBlinkEnabled() const;
-    Csm::csmBool IsExpressionEnabled() const;
-    Csm::csmBool IsLookEnabled() const;
-    Csm::csmBool IsPhysicsEnabled() const;
-    Csm::csmBool IsLipSyncEnabled() const;
-    Csm::csmBool IsPoseEnabled() const;
 };

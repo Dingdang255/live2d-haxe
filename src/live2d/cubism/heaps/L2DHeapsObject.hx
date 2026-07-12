@@ -8,8 +8,8 @@ import h2d.filter.Filter;
 import h2d.filter.Group;
 import live2d.cubism.L2DCore;
 import live2d.cubism.backend.heaps.HeapsRenderer;
-import live2d.cubism.core.CubismAPI;
 import live2d.cubism.core.L2DModel;
+import live2d.cubism.ext.L2DPhysicsTuner;
 #if sys
 import haxe.Json;
 import sys.FileSystem;
@@ -44,8 +44,14 @@ class L2DHeapsObject extends Object
     /** Underlying L2DCore. Exposed for advanced access (x, y, alpha, model, ...). */
     public var core(default, null):L2DCore;
 
+    /** Optional physics tuner for runtime gravity/wind/strength adjustment. */
+    public var physicsTuner:L2DPhysicsTuner;
+
     /** Heaps renderer instance backing this object. */
     var renderer:HeapsRenderer;
+    /** Public accessor for the renderer (for perf panels, etc.). */
+    public var heapsRenderer(get, never):HeapsRenderer;
+    function get_heapsRenderer():HeapsRenderer return renderer;
 
     /** Lazily-created filter group for chained filter effects. */
     var filterGroup:Group;
@@ -83,7 +89,7 @@ class L2DHeapsObject extends Object
         _dir = dir;
         _fileName = fileName;
         renderer = new HeapsRenderer(this);
-        core = new L2DCore(dir, fileName, CubismAPI.getBridge(), renderer);
+        core = new L2DCore(dir, fileName, renderer);
     }
 
     // ===== Heaps lifecycle =====
@@ -106,7 +112,9 @@ class L2DHeapsObject extends Object
         // (dirty→false) → draw phase sees dirty=false and skips flush.
         if (core != null && core.model.notNull())
         {
+            if (physicsTuner != null) physicsTuner.applyPreUpdate();
             core.update(hxd.Timer.dt);
+            if (physicsTuner != null) physicsTuner.applyPostUpdate();
             core.render();
         }
         super.sync(ctx);
@@ -282,7 +290,7 @@ class L2DHeapsObject extends Object
         try
         {
             newRenderer = new HeapsRenderer(this);
-            newCore = new L2DCore(_dir, _fileName, CubismAPI.getBridge(), newRenderer);
+            newCore = new L2DCore(_dir, _fileName, newRenderer);
         }
         catch (e:Dynamic)
         {

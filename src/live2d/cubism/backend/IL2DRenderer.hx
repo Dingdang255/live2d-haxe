@@ -49,11 +49,22 @@ interface IL2DRenderer
     /** Reset color transform to identity (no tinting) */
     function resetColorTransform(obj:L2DDisplayHandle):Void;
 
-    /** Set a mask display object on a target */
-    function setMask(obj:L2DDisplayHandle, mask:L2DDisplayHandle):Void;
+    /** Set a mask display object on a target. When isInverted is true, the mask
+        region is clipped OUT instead of IN (used for inverted mask groups). */
+    function setMask(obj:L2DDisplayHandle, mask:L2DDisplayHandle, ?isInverted:Bool = false):Void;
 
     /** Remove mask from a display object */
     function clearMask(obj:L2DDisplayHandle):Void;
+
+    /** Get the fallback mask RT texture for a mask display object.
+        Returns null if no RT has been created for this object.
+        Used by the shader path to bind pre-rendered mask RT as u_maskTexture. */
+    function getFallbackMaskTexture(obj:L2DDisplayHandle):L2DTextureHandle;
+
+    /** Set fallback mask RT dimensions computed from actual vertex AABB.
+        Called by L2DCore.preRenderFallbackMasks() before rendering fallback mask shapes.
+        Non-Heaps backends may ignore this. */
+    function setFallbackMaskDimensions(minX:Float, minY:Float, width:Float, height:Float):Void;
 
     /** Whether this renderer supports GPU shader-based rendering (mask + color) */
     function supportsShaderMask():Bool;
