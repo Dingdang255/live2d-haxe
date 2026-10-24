@@ -14,15 +14,21 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed architecture docs and [BAC
 
 ### cpp target (Flixel/OpenFL)
 
-<video src="https://github.com/user-attachments/assets/c98ea2d4-15c6-4584-9d7d-ad84c42fa06a" controls="controls" style="max-width: 100%;"></video>
+<video src="https://github.com/user-attachments/assets/6064de8e-2e39-4720-9c50-82c6ddce81cc" controls="controls" style="max-width: 100%;"></video>
 
 > Demo showing model switching, hit test, expressions, motions, eye tracking, and scaling.
 
 ### hl target (HashLink/JIT)
 
-<video src="https://github.com/user-attachments/assets/f8d0088d-1dd3-439c-93a8-d4b3d8b47742" controls="controls" style="max-width: 100%;"></video>
+<video src="https://github.com/user-attachments/assets/88ad4fc8-0df0-4092-ab08-aff82bdef9d0" controls="controls" style="max-width: 100%;"></video>
 
 > HashLink JIT-accelerated demo. Faster iteration with no C++ rebuild. Compatible with Lime 8.0.1 and 8.3.0.
+
+### heaps target (HashLink/Heaps)
+
+<video src="https://github.com/user-attachments/assets/3b3af81f-debf-4c26-bb4d-48b64b5ec038" controls="controls" style="max-width: 100%;"></video>
+
+> Heaps rendering backend demo: scene-graph integration, model switching, hit test, eye tracking, scaling, plus hot-reload, filter chain, and the performance panel.
 
 ## Architecture
 
